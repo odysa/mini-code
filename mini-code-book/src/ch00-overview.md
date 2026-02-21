@@ -193,8 +193,8 @@ You do *not* need an API key until Chapter 6. Chapters 1 through 5 use the
 Clone the repository and verify things build:
 
 ```bash
-git clone <repo-url>
-cd <project-dir>
+git clone https://github.com/odysa/mini-code.git
+cd mini-code
 cargo build
 ```
 
