@@ -1,0 +1,3 @@
+[workspace]
+members = ["mini-code", "mini-code-starter", "mini-code-xtask"]
+resolver = "3"

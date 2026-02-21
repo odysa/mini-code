@@ -1,0 +1,11 @@
+[book]
+title = "Build Your Own Mini Coding Agent in Rust"
+authors = ["mini-code contributors"]
+language = "en"
+src = "src"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
