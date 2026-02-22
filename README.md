@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="Mini Claw Code banner" width="500">
+</p>
+
 <h1 align="center">Mini Claw Code</h1>
 
 <p align="center">
@@ -131,6 +135,14 @@ flowchart LR
     style C7 fill:#2d333b,stroke:#539bf5,color:#adbac7
     style C8 fill:#2d333b,stroke:#e5534b,color:#adbac7
 ```
+
+## Safety warning
+
+This agent has **unrestricted shell access**. The `BashTool` passes LLM-generated commands directly to `bash -c` with no sandboxing, filtering, or timeout. The `ReadTool` and `WriteTool` can access any file your user account can. This is intentional for a learning project, but:
+
+- **Do not run this agent on untrusted prompts or files** (prompt injection via file contents can execute arbitrary commands).
+- **Do not run this on a machine with sensitive data** without understanding the risks.
+- See Chapter 15 (coming soon) for how to add safety rails.
 
 ## Quick start
 

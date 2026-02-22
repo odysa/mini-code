@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mini-code is a tutorial project for building a mini coding agent in Rust — a small version of tools like Claude Code or OpenCode. It has a complete reference implementation (`mini-claw-code`) and a starter template (`mini-claw-code-starter`) that learners fill in progressively through a 7-chapter mdBook tutorial (`mini-claw-code-book`).
+Mini-code is a tutorial project for building a mini coding agent in Rust — a small version of tools like Claude Code or OpenCode. It has a complete reference implementation (`mini-claw-code`) and a starter template (`mini-claw-code-starter`) that learners fill in progressively through an mdBook tutorial (`mini-claw-code-book`). Chapters 1–7 are hands-on (learners write code in the starter), chapters 8–12 are extension walkthroughs (read-only reference), and chapters 13–15 are stubs (not yet written).
 
 ## Workspace Structure
 
@@ -52,7 +52,7 @@ cargo x book
 - `SimpleAgent<P: Provider>` — Holds provider + tools, loops calling provider and executing tools until `StopReason::Stop`
 
 ### Tools (`mini-claw-code/src/tools/`)
-Each implements the `Tool` trait: `BashTool`, `ReadTool`, `WriteTool`, `EditTool`.
+Each implements the `Tool` trait: `BashTool`, `ReadTool`, `WriteTool`, `EditTool`, `AskTool`.
 
 ### Providers (`mini-claw-code/src/providers/`)
 - `OpenRouterProvider` — OpenAI-compatible HTTP provider; reads `OPENROUTER_API_KEY` from env (loaded via `dotenvy`)
@@ -63,7 +63,7 @@ User prompt → Provider sends prompt + tool schemas to LLM → LLM responds wit
 
 ## Testing
 
-Tests live in `mini-claw-code/src/tests/` organized by chapter (ch1.rs–ch7.rs). They use `MockProvider` to avoid real API calls and `tempfile` for filesystem tests. Both sync (`#[test]`) and async (`#[tokio::test]`) patterns are used.
+Tests live in `mini-claw-code/src/tests/` organized by chapter (ch1.rs–ch12.rs). Starter tests cover ch1–ch7 only. They use `MockProvider` to avoid real API calls and `tempfile` for filesystem tests. Both sync (`#[test]`) and async (`#[tokio::test]`) patterns are used.
 
 ## Environment
 

@@ -255,21 +255,32 @@ async fn test_ch3_final_response_none_text() {
 
 #[tokio::test]
 async fn test_ch3_tool_call_missing_arg() {
-    // Tool call with empty arguments should cause an error from the tool
-    let provider = MockProvider::new(VecDeque::from([AssistantTurn {
-        text: None,
-        tool_calls: vec![ToolCall {
-            id: "call_1".into(),
-            name: "read".into(),
-            arguments: json!({}),
-        }],
-        stop_reason: StopReason::ToolUse,
-    }]));
+    // Tool call with empty arguments: the tool error is caught by unwrap_or_else
+    // and sent back to the LLM as a ToolResult string, not propagated as Err.
+    let provider = MockProvider::new(VecDeque::from([
+        AssistantTurn {
+            text: None,
+            tool_calls: vec![ToolCall {
+                id: "call_1".into(),
+                name: "read".into(),
+                arguments: json!({}),
+            }],
+            stop_reason: StopReason::ToolUse,
+        },
+        AssistantTurn {
+            text: Some("Missing path argument".into()),
+            tool_calls: vec![],
+            stop_reason: StopReason::Stop,
+        },
+    ]));
 
     let tools = ToolSet::new().with(ReadTool::new());
-    let result = single_turn(&provider, &tools, "Read something").await;
+    let result = single_turn(&provider, &tools, "Read something")
+        .await
+        .unwrap();
 
-    assert!(result.is_err());
+    // The error was handled gracefully — the LLM received it and responded
+    assert_eq!(result, "Missing path argument");
 }
 
 #[tokio::test]

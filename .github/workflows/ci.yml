@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (reference)
+        run: cargo clippy -p mini-claw-code -- -D warnings
+
+      - name: Clippy (starter)
+        run: cargo clippy -p mini-claw-code-starter -- -D warnings
+
+      - name: Tests (reference)
+        run: cargo test -p mini-claw-code
+
+      - name: Tests (starter — expected to fail until learner fills in stubs)
+        run: cargo test -p mini-claw-code-starter || true

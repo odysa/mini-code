@@ -17,7 +17,7 @@ pub enum AgentEvent {
 /// Format a one-line summary of a tool call for terminal output.
 pub(crate) fn tool_summary(call: &ToolCall) -> String {
     // Pick the most useful argument to display:
-    // "command" for bash, "path" for read/write/edit.
+    // "command" for bash, "path" for read/write/edit, "question" for AskTool.
     let detail = call
         .arguments
         .get("command")
@@ -93,6 +93,34 @@ impl<P: Provider> SimpleAgent<P> {
         self
     }
 
+    /// Execute all tool calls and return `(call_id, result_string)` pairs.
+    async fn execute_tools(&self, calls: &[ToolCall]) -> Vec<(String, String)> {
+        let mut results = Vec::with_capacity(calls.len());
+        for call in calls {
+            let content = match self.tools.get(&call.name) {
+                Some(t) => t
+                    .call(call.arguments.clone())
+                    .await
+                    .unwrap_or_else(|e| format!("error: {e}")),
+                None => format!("error: unknown tool `{}`", call.name),
+            };
+            results.push((call.id.clone(), content));
+        }
+        results
+    }
+
+    /// Push an assistant turn and its tool results into the message history.
+    fn push_results(
+        messages: &mut Vec<Message>,
+        turn: AssistantTurn,
+        results: Vec<(String, String)>,
+    ) {
+        messages.push(Message::Assistant(turn));
+        for (id, content) in results {
+            messages.push(Message::ToolResult { id, content });
+        }
+    }
+
     /// Like [`run_with_events`](Self::run_with_events) but accepts an
     /// existing message history.  The caller pushes `Message::User(…)`
     /// before calling; on return the vec contains the full conversation
@@ -120,26 +148,14 @@ impl<P: Provider> SimpleAgent<P> {
                     return messages;
                 }
                 StopReason::ToolUse => {
-                    let mut results = Vec::with_capacity(turn.tool_calls.len());
                     for call in &turn.tool_calls {
                         let _ = events.send(AgentEvent::ToolCall {
                             name: call.name.clone(),
                             summary: tool_summary(call),
                         });
-                        let content = match self.tools.get(&call.name) {
-                            Some(t) => t
-                                .call(call.arguments.clone())
-                                .await
-                                .unwrap_or_else(|e| format!("error: {e}")),
-                            None => format!("error: unknown tool `{}`", call.name),
-                        };
-                        results.push((call.id.clone(), content));
                     }
-
-                    messages.push(Message::Assistant(turn));
-                    for (id, content) in results {
-                        messages.push(Message::ToolResult { id, content });
-                    }
+                    let results = self.execute_tools(&turn.tool_calls).await;
+                    Self::push_results(&mut messages, turn, results);
                 }
             }
         }
@@ -149,47 +165,8 @@ impl<P: Provider> SimpleAgent<P> {
     /// printing to stdout. Sends `ToolCall` for each tool invocation,
     /// then `Done` or `Error` when finished.
     pub async fn run_with_events(&self, prompt: &str, events: mpsc::UnboundedSender<AgentEvent>) {
-        let defs = self.tools.definitions();
-        let mut messages = vec![Message::User(prompt.to_string())];
-
-        loop {
-            let turn = match self.provider.chat(&messages, &defs).await {
-                Ok(t) => t,
-                Err(e) => {
-                    let _ = events.send(AgentEvent::Error(e.to_string()));
-                    return;
-                }
-            };
-
-            match turn.stop_reason {
-                StopReason::Stop => {
-                    let _ = events.send(AgentEvent::Done(turn.text.unwrap_or_default()));
-                    return;
-                }
-                StopReason::ToolUse => {
-                    let mut results = Vec::with_capacity(turn.tool_calls.len());
-                    for call in &turn.tool_calls {
-                        let _ = events.send(AgentEvent::ToolCall {
-                            name: call.name.clone(),
-                            summary: tool_summary(call),
-                        });
-                        let content = match self.tools.get(&call.name) {
-                            Some(t) => t
-                                .call(call.arguments.clone())
-                                .await
-                                .unwrap_or_else(|e| format!("error: {e}")),
-                            None => format!("error: unknown tool `{}`", call.name),
-                        };
-                        results.push((call.id.clone(), content));
-                    }
-
-                    messages.push(Message::Assistant(turn));
-                    for (id, content) in results {
-                        messages.push(Message::ToolResult { id, content });
-                    }
-                }
-            }
-        }
+        let messages = vec![Message::User(prompt.to_string())];
+        self.run_with_history(messages, events).await;
     }
 
     /// Run the agent loop, accumulating into the provided message history.
@@ -210,57 +187,18 @@ impl<P: Provider> SimpleAgent<P> {
                     return Ok(text);
                 }
                 StopReason::ToolUse => {
-                    let mut results = Vec::with_capacity(turn.tool_calls.len());
                     for call in &turn.tool_calls {
                         print!("\x1b[2K\r{}\n", tool_summary(call));
-                        let content = match self.tools.get(&call.name) {
-                            Some(t) => t
-                                .call(call.arguments.clone())
-                                .await
-                                .unwrap_or_else(|e| format!("error: {e}")),
-                            None => format!("error: unknown tool `{}`", call.name),
-                        };
-                        results.push((call.id.clone(), content));
                     }
-
-                    messages.push(Message::Assistant(turn));
-                    for (id, content) in results {
-                        messages.push(Message::ToolResult { id, content });
-                    }
+                    let results = self.execute_tools(&turn.tool_calls).await;
+                    Self::push_results(messages, turn, results);
                 }
             }
         }
     }
 
     pub async fn run(&self, prompt: &str) -> anyhow::Result<String> {
-        let defs = self.tools.definitions();
         let mut messages = vec![Message::User(prompt.to_string())];
-
-        loop {
-            let turn = self.provider.chat(&messages, &defs).await?;
-
-            match turn.stop_reason {
-                StopReason::Stop => return Ok(turn.text.unwrap_or_default()),
-                StopReason::ToolUse => {
-                    let mut results = Vec::with_capacity(turn.tool_calls.len());
-                    for call in &turn.tool_calls {
-                        print!("\x1b[2K\r{}\n", tool_summary(call));
-                        let content = match self.tools.get(&call.name) {
-                            Some(t) => t
-                                .call(call.arguments.clone())
-                                .await
-                                .unwrap_or_else(|e| format!("error: {e}")),
-                            None => format!("error: unknown tool `{}`", call.name),
-                        };
-                        results.push((call.id.clone(), content));
-                    }
-
-                    messages.push(Message::Assistant(turn));
-                    for (id, content) in results {
-                        messages.push(Message::ToolResult { id, content });
-                    }
-                }
-            }
-        }
+        self.chat(&mut messages).await
     }
 }

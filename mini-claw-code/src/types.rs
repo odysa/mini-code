@@ -85,6 +85,10 @@ pub enum Message {
     ToolResult { id: String, content: String },
 }
 
+/// The `Tool` trait uses `#[async_trait]` (instead of RPITIT like `Provider`)
+/// because tools are stored as `Box<dyn Tool>` in `ToolSet`, which requires
+/// object safety. RPITIT methods (`-> impl Future`) are not object-safe,
+/// so `async_trait` desugars them into `-> Pin<Box<dyn Future>>` which is.
 #[async_trait::async_trait]
 pub trait Tool: Send + Sync {
     fn definition(&self) -> &ToolDefinition;
@@ -132,6 +136,9 @@ impl Default for ToolSet {
     }
 }
 
+/// `Provider` uses RPITIT (return-position `impl Trait` in trait) because it
+/// is always used as a generic parameter (`P: Provider`), never as `dyn Provider`.
+/// This avoids the heap allocation that `#[async_trait]` requires.
 pub trait Provider: Send + Sync {
     fn chat<'a>(
         &'a self,

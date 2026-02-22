@@ -1,3 +1,5 @@
-# Chapter 14: Safety Rails
+# Chapter 15: Safety Rails
 
-> **WIP** — This chapter is a stub and not yet written.
+> This chapter is not yet written. It will cover adding confirmation prompts, command filtering, timeouts, and other safety measures to your agent.
+>
+> Want to contribute? [Open an issue](https://github.com/odysa/mini-claw-code/issues) or submit a PR!

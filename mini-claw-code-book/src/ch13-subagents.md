@@ -1,3 +1,5 @@
-# Chapter 12: Subagents
+# Chapter 13: Subagents
 
-> **WIP** — This chapter is a stub and not yet written.
+> This chapter is not yet written. It will cover spawning child agents that handle subtasks independently.
+>
+> Want to contribute? [Open an issue](https://github.com/odysa/mini-claw-code/issues) or submit a PR!
