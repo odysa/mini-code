@@ -5,8 +5,7 @@
 <h1 align="center">Mini Claw Code</h1>
 
 <p align="center">
-  <strong>Build your own coding agent from scratch in Rust.</strong><br>
-  The same architecture behind Claude Code, Cursor, and OpenCode — demystified in ~300 lines.
+  <strong>Build your own coding agent from scratch in Rust.</strong>
 </p>
 
 <p align="center">

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="Mini Claw Code banner" width="500">
+</p>
+
 <h1 align="center">Mini Claw Code</h1>
 
 <p align="center">
