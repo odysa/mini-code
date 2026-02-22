@@ -20,7 +20,7 @@
 你每天都在使用编程智能体，但你有没有想过它们到底是怎么工作的？
 
 <p align="center">
-  <img src="terminal_example.png" alt="mini-claw-code 在终端中运行" width="700">
+  <img src="docs/terminal_example.png" alt="mini-claw-code 在终端中运行" width="700">
 </p>
 
 比你想象的要简单。去掉 UI、流式传输、模型路由——每个编程智能体的核心就是这个循环：

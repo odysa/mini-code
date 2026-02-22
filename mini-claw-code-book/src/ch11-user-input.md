@@ -104,8 +104,8 @@ impl AskTool {
 
 ### Tool::call
 
-The `call` implementation extracts the `question` and `options` from the JSON
-arguments and delegates to the handler:
+The `call` implementation extracts `question`, parses options with a helper,
+and delegates to the handler:
 
 ```rust
 #[async_trait::async_trait]
@@ -120,30 +120,35 @@ impl Tool for AskTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("missing required parameter: question"))?;
 
-        let options: Vec<String> = args
-            .get("options")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let options = parse_options(&args);
 
         self.handler.ask(question, &options).await
     }
 }
+
+/// Extract the optional `options` array from tool arguments.
+fn parse_options(args: &Value) -> Vec<String> {
+    args.get("options")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 ```
 
-If `options` is missing or not an array, it defaults to an empty vec -- the
+The `parse_options` helper keeps `call()` focused on the happy path. If
+`options` is missing or not an array, it defaults to an empty vec -- the
 handler treats this as free-text input.
 
 ## Three handlers
 
 ### CliInputHandler
 
-The simplest handler. Prints the question, optionally lists numbered choices,
-and reads a line from stdin:
+The simplest handler. Prints the question, lists numbered choices (if any),
+reads a line from stdin, and resolves numbered answers:
 
 ```rust
 pub struct CliInputHandler;
@@ -151,40 +156,51 @@ pub struct CliInputHandler;
 #[async_trait::async_trait]
 impl InputHandler for CliInputHandler {
     async fn ask(&self, question: &str, options: &[String]) -> anyhow::Result<String> {
-        // Uses spawn_blocking because stdin is synchronous
+        let question = question.to_string();
+        let options = options.to_vec();
+
+        // spawn_blocking because stdin is synchronous
         tokio::task::spawn_blocking(move || {
+            // Display the question and numbered choices (if any)
             println!("\n  {question}");
-            if !options.is_empty() {
-                for (i, opt) in options.iter().enumerate() {
-                    println!("    {}) {opt}", i + 1);
-                }
+            for (i, opt) in options.iter().enumerate() {
+                println!("    {}) {opt}", i + 1);
             }
+
+            // Read the answer
             print!("  > ");
             io::stdout().flush()?;
-
             let mut line = String::new();
             io::stdin().lock().read_line(&mut line)?;
             let answer = line.trim().to_string();
 
-            // If options provided and user entered a number, resolve it
-            if !opts.is_empty()
-                && let Ok(n) = answer.parse::<usize>()
-                && n >= 1
-                && n <= opts.len()
-            {
-                return Ok(opts[n - 1].clone());
-            }
-
-            Ok(answer)
+            // If the user typed a valid option number, resolve it
+            Ok(resolve_option(&answer, &options))
         }).await?
     }
 }
+
+/// If `answer` is a number matching one of the options, return that option.
+/// Otherwise return the raw answer.
+fn resolve_option(answer: &str, options: &[String]) -> String {
+    if let Ok(n) = answer.parse::<usize>()
+        && n >= 1
+        && n <= options.len()
+    {
+        return options[n - 1].clone();
+    }
+    answer.to_string()
+}
 ```
 
-The number-resolution logic at the bottom uses **let-chain syntax** (stabilized
-in Rust 1.87 / edition 2024): multiple conditions joined with `&&` including
-`let Ok(n) = ...` pattern bindings. If the user types `"2"` and there are three
-options, it resolves to `options[1]`. Otherwise the raw text is returned.
+The `resolve_option` helper keeps the closure body clean. It uses **let-chain
+syntax** (stabilized in Rust 1.87 / edition 2024): multiple conditions joined
+with `&&` including `let Ok(n) = ...` pattern bindings. If the user types `"2"`
+and there are three options, it resolves to `options[1]`. Otherwise the raw text
+is returned.
+
+Note the `for` loop over `options` does nothing when the slice is empty -- no
+special `if` branch needed.
 
 Use this in simple CLI apps like `examples/chat.rs`:
 
