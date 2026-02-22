@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Mini Claw Code banner" width="500">
+  <img src="docs/demo.gif" alt="Mini Claw Code demo" width="700">
 </p>
 
 <h1 align="center">Mini Claw Code</h1>
@@ -111,7 +111,7 @@ Match on `StopReason`. Follow instructions. That's the architecture.
 | 10 | Streaming | `StreamingAgent` with SSE parsing and `AgentEvent`s |
 | 11 | User Input | `AskTool` — let the LLM ask *you* questions |
 | 12 | Plan Mode | Read-only planning with approval gating |
-| 13 | Subagents | *coming soon* |
+| 13 | Subagents | Spawn child agents for subtasks via `SubagentTool` |
 | 14 | MCP | *coming soon* |
 | 15 | Safety Rails | *coming soon* |
 

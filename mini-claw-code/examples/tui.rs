@@ -147,7 +147,13 @@ async fn ui_event_loop(
             event = rx.recv() => {
                 match event {
                     Some(AgentEvent::TextDelta(text)) => {
-                        streaming_text = true;
+                        if !streaming_text {
+                            // First delta: clear the spinner line
+                            print!("{CLEAR_LINE}");
+                            streaming_text = true;
+                        }
+                        print!("{text}");
+                        let _ = io::stdout().flush();
                         text_buf.push_str(&text);
                     }
                     Some(AgentEvent::ToolCall { summary, .. }) => {
@@ -169,14 +175,20 @@ async fn ui_event_loop(
                         let _ = io::stdout().flush();
                     }
                     Some(AgentEvent::Done(_)) => {
-                        print!("{CLEAR_LINE}");
-                        let _ = io::stdout().flush();
-                        if !text_buf.is_empty() {
+                        if streaming_text && !text_buf.is_empty() {
+                            // Clear the raw streamed text and re-render with markdown
+                            let raw_lines = text_buf.chars().filter(|&c| c == '\n').count() + 1;
+                            // Move cursor up and clear each line
+                            for _ in 0..raw_lines {
+                                print!("\x1b[A{CLEAR_LINE}");
+                            }
+                            print!("{CLEAR_LINE}");
                             let rendered = termimad::text(&text_buf);
                             print!("{rendered}\n");
                         } else {
-                            println!();
+                            print!("{CLEAR_LINE}\n");
                         }
+                        let _ = io::stdout().flush();
                         return;
                     }
                     Some(AgentEvent::Error(e)) => {
@@ -220,7 +232,7 @@ async fn ui_event_loop(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let provider = OpenRouterProvider::from_env_with_model("anthropic/claude-opus-4-5")?;
+    let provider = OpenRouterProvider::from_env_with_model("anthropic/claude-sonnet-4-5")?;
 
     // Channel for AskTool → TUI communication
     let (input_tx, mut input_rx) = mpsc::unbounded_channel::<UserInputRequest>();
