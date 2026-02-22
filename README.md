@@ -22,10 +22,6 @@
 
 You use coding agents every day. Ever wonder how they actually work?
 
-<p align="center">
-  <img src="docs/terminal_example.png" alt="mini-claw-code running in a terminal" width="700">
-</p>
-
 It's simpler than you think. Strip away the UI, the streaming, the model routing — and every coding agent is just this loop:
 
 ```
