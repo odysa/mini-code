@@ -1,2 +1,2 @@
 [alias]
-x = "run --package mini-code-xtask --"
+x = "run --package mini-claw-code-xtask --"

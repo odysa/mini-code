@@ -1,0 +1,25 @@
+[package]
+name = "mini-claw-code"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+async-trait = "0.1"
+dotenvy = "0.15"
+tokio = { version = "1", features = ["process", "fs", "sync"] }
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+crossterm = "0.28"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+tempfile = "3"
+termimad = "0.30"
+
+[[example]]
+name = "chat"
+
+[[example]]
+name = "tui"

@@ -1,0 +1,4 @@
+[package]
+name = "mini-claw-code-xtask"
+version = "0.1.0"
+edition = "2024"

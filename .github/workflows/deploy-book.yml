@@ -32,12 +32,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Build book
-        run: mdbook build mini-code-book
+        run: mdbook build mini-claw-code-book
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: mini-code-book/book
+          path: mini-claw-code-book/book
 
   deploy:
     needs: build
