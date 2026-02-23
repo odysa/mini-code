@@ -1,22 +1,22 @@
-# Summary
+# 目录
 
-- [Overview](./ch00-overview.md)
-- [Chapter 1: Core Types](./ch01-core-types.md)
-- [Chapter 2: Your First Tool](./ch02-first-tool.md)
-- [Chapter 3: Single Turn](./ch03-single-turn.md)
-- [Chapter 4: More Tools](./ch04-more-tools.md)
-- [Chapter 5: Your First Agent SDK!](./ch05-agent-loop.md)
-- [Chapter 6: The OpenRouter Provider](./ch06-http-provider.md)
-- [Chapter 7: A Simple CLI](./ch07-putting-together.md)
-- [Chapter 8: The Singularity](./ch08-singularity.md)
+- [概述](./ch00-overview.md)
+- [第 1 章：核心类型](./ch01-core-types.md)
+- [第 2 章：你的第一个工具](./ch02-first-tool.md)
+- [第 3 章：单轮对话](./ch03-single-turn.md)
+- [第 4 章：更多工具](./ch04-more-tools.md)
+- [第 5 章：你的第一个 Agent SDK！](./ch05-agent-loop.md)
+- [第 6 章：OpenRouter Provider](./ch06-http-provider.md)
+- [第 7 章：一个简单的 CLI](./ch07-putting-together.md)
+- [第 8 章：奇点时刻](./ch08-singularity.md)
 ---
 
-# Extensions
+# 扩展篇
 
-- [Chapter 9: A Better TUI](./ch09-tui.md)
-- [Chapter 10: Streaming](./ch10-streaming.md)
-- [Chapter 11: User Input](./ch11-user-input.md)
-- [Chapter 12: Plan Mode](./ch12-plan-mode.md)
-- [Chapter 13: Subagents](./ch13-subagents.md)
-- [Chapter 14: MCP: Model Context Protocol (coming soon)](./ch14-mcp.md)
-- [Chapter 15: Safety Rails (coming soon)](./ch15-safety.md)
+- [第 9 章：更好的 TUI](./ch09-tui.md)
+- [第 10 章：流式输出](./ch10-streaming.md)
+- [第 11 章：用户输入](./ch11-user-input.md)
+- [第 12 章：计划模式](./ch12-plan-mode.md)
+- [第 13 章：子代理](./ch13-subagents.md)
+- [第 14 章：MCP：模型上下文协议（即将推出）](./ch14-mcp.md)
+- [第 15 章：安全护栏（即将推出）](./ch15-safety.md)

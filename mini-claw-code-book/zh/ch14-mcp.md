@@ -1,5 +1,5 @@
-# Chapter 14: MCP: Model Context Protocol
+# 第十四章：MCP：模型上下文协议（Model Context Protocol）
 
-> This chapter is not yet written. It will cover integrating MCP servers to give your agent access to external tools and data sources.
+> 本章尚未编写。将会介绍如何集成 MCP 服务器，让你的智能体访问外部工具和数据源。
 >
-> Want to contribute? [Open an issue](https://github.com/odysa/mini-claw-code/issues) or submit a PR!
+> 欢迎参与贡献！[提交 Issue](https://github.com/odysa/mini-claw-code/issues) 或发起 PR！

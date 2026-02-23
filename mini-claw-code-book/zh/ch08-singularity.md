@@ -1,21 +1,21 @@
-# Chapter 8: The Singularity
+# 第八章：奇点
 
-Your agent can edit itself and it starts self-evolving. You don't need to write any code starting from now.
+你的智能体已经可以编辑自身代码并开始自我进化了。从现在起，你不再需要手动编写任何代码。
 
-## Extensions
+## 扩展章节
 
-The extension chapters that follow walk through the reference implementation.
-You don't need to write the code yourself -- read them to understand the
-design, then let your agent implement them (or do it yourself for practice):
+接下来的扩展章节将逐步讲解参考实现。
+你不需要亲自编写代码——通过阅读来理解设计思路，
+然后让你的智能体来实现它们（当然也可以自己动手练习）：
 
-- [Chapter 9: A Better TUI](./ch09-tui.md) -- Markdown rendering, spinners, collapsed tool calls.
-- [Chapter 10: Streaming](./ch10-streaming.md) -- Stream tokens as they arrive with `StreamingAgent`.
-- [Chapter 11: User Input](./ch11-user-input.md) -- Let the LLM ask you clarifying questions.
-- [Chapter 12: Plan Mode](./ch12-plan-mode.md) -- Read-only planning with approval gating.
+- [第九章：更好的终端界面](./ch09-tui.md) -- Markdown 渲染、加载动画、折叠工具调用。
+- [第十章：流式输出](./ch10-streaming.md) -- 使用 `StreamingAgent` 实现 token 实时流式输出。
+- [第十一章：用户输入](./ch11-user-input.md) -- 让 LLM 向你提出澄清性问题。
+- [第十二章：规划模式](./ch12-plan-mode.md) -- 只读规划与审批门控。
 
-Beyond the extension chapters, here are more ideas to explore:
+除了扩展章节之外，这里还有更多值得探索的方向：
 
-- **Parallel tool calls** -- Execute concurrent tool calls with `tokio::join!`.
-- **Token tracking** -- Truncate old messages when approaching the context limit.
-- **More tools** -- Web search, database queries, HTTP requests. The `Tool` trait makes it easy.
-- **MCP** -- Expose your tools as an MCP server or connect to external ones.
+- **并行工具调用** -- 使用 `tokio::join!` 并发执行多个工具调用。
+- **Token 用量追踪** -- 在接近上下文限制时截断旧消息。
+- **更多工具** -- 网络搜索、数据库查询、HTTP 请求。`Tool` trait 让扩展变得简单。
+- **MCP** -- 将你的工具暴露为 MCP 服务器，或连接外部 MCP 服务。

@@ -1,27 +1,18 @@
-# Chapter 9: A Better TUI
+# 第九章：更好的 TUI
 
-The `chat.rs` CLI works, but it dumps plain text and shows every tool call. A
-real coding agent deserves markdown rendering, a thinking spinner, and
-collapsed tool calls when the agent gets busy.
+`chat.rs` 命令行界面虽然能用，但它只会输出纯文本，并且显示每一次工具调用。一个真正的编码智能体应该具备 Markdown 渲染、思考动画以及在智能体忙碌时折叠工具调用的能力。
 
-See `mini-claw-code/examples/tui.rs` for a reference implementation. It uses:
+参见 `mini-claw-code/examples/tui.rs` 中的参考实现。它使用了：
 
-- **`termimad`** for inline markdown rendering in the terminal.
-- **`crossterm`** for raw terminal mode (used by the arrow-key selection UI in
-  Chapter 11).
-- An **animated spinner** (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) that ticks while the agent thinks.
-- **Collapsed tool calls**: after 3 tool calls, subsequent ones are collapsed
-  into a `... and N more` counter to keep the output clean.
+- **`termimad`**：在终端中进行内联 Markdown 渲染。
+- **`crossterm`**：用于原始终端模式（raw terminal mode），在第十一章的方向键选择 UI 中会用到。
+- **加载动画**（animated spinner）(`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)：在智能体思考时循环播放。
+- **折叠工具调用**：超过 3 次工具调用后，后续调用会折叠为 `... and N more` 计数器，保持输出整洁。
 
-The TUI builds on the `AgentEvent` stream from `StreamingAgent` (Chapter 10).
-The event loop uses `tokio::select!` to multiplex three sources:
+TUI 构建在第十章 `StreamingAgent` 的 `AgentEvent` 流之上。事件循环使用 `tokio::select!` 来多路复用三个事件源：
 
-1. **Agent events** (`AgentEvent::TextDelta`, `ToolCall`, `Done`, `Error`) --
-   render streaming text, tool summaries, or final output.
-2. **User input requests** from `AskTool` (Chapter 11) -- pause the spinner
-   and show a text prompt or arrow-key selection list.
-3. **Timer ticks** -- advance the spinner animation.
+1. **智能体事件**（`AgentEvent::TextDelta`、`ToolCall`、`Done`、`Error`）——渲染流式文本、工具调用摘要或最终输出。
+2. **用户输入请求**，来自 `AskTool`（第十一章）——暂停加载动画，显示文本提示或方向键选择列表。
+3. **定时器心跳**（Timer ticks）——推进加载动画。
 
-This chapter is exposition only -- no code to write. Read through
-`examples/tui.rs` to see how the pieces fit together, or ask your mini-claw-code
-agent to build a TUI for you.
+本章仅为讲解说明，无需编写代码。请阅读 `examples/tui.rs` 了解各部分如何协同工作，或者让你的 mini-claw-code 智能体为你构建一个 TUI。

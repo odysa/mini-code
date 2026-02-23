@@ -1,26 +1,25 @@
-# Chapter 5: Your First Agent SDK!
+# 第五章：你的第一个 Agent SDK！
 
-This is the chapter where everything comes together. You have a provider that
-returns `AssistantTurn` responses and four tools that execute actions. Now you
-will build the `SimpleAgent` -- the loop that connects them.
+这是所有内容汇聚在一起的章节。你已经有了一个返回 `AssistantTurn` 响应的
+Provider，以及四个可以执行操作的工具。现在你要构建 `SimpleAgent` ——将它们
+连接起来的循环。
 
-This is the "aha!" moment of the tutorial. The agent loop is surprisingly
-short, but it is the engine that makes an LLM into an agent.
+这是本教程的"顿悟"时刻。Agent 循环（Agent Loop）短得出人意料，但正是它将
+LLM 变成了一个真正的 Agent。
 
-## What is an agent loop?
+## 什么是 Agent 循环？
 
-In Chapter 3 you built `single_turn()` -- one prompt, one round of tool calls,
-one final answer. That is enough when the LLM knows everything it needs after
-reading a single file. But real tasks are messier:
+在第三章中，你实现了 `single_turn()` ——一次提示、一轮工具调用、一个最终答案。
+当 LLM 读完单个文件就能获得所有所需信息时，这已经足够了。但现实任务往往更加
+复杂：
 
-> "Find the bug in this project and fix it."
+> "找到这个项目中的 bug 并修复它。"
 
-The LLM might need to read five files, run the test suite, edit a source file,
-run the tests again, and then report back. Each of those is a tool call, and
-the LLM cannot plan them all upfront because the result of one call determines
-the next. It needs a **loop**.
+LLM 可能需要读取五个文件、运行测试套件、编辑源文件、再次运行测试，然后才能
+给出报告。每一步都是一次工具调用，而 LLM 无法提前规划好所有调用，因为上一次
+调用的结果决定了下一步该做什么。它需要一个**循环**。
 
-The agent loop is that loop:
+Agent 循环就是这个循环：
 
 ```mermaid
 flowchart TD
@@ -30,29 +29,28 @@ flowchart TD
     D -- "Push assistant + tool results" --> B
 ```
 
-1. Send messages to the LLM.
-2. If the LLM says "I'm done" (`StopReason::Stop`), return its text.
-3. If the LLM says "I need tools" (`StopReason::ToolUse`), execute them.
-4. Append the assistant turn and tool results to the message history.
-5. Go to step 1.
+1. 将消息发送给 LLM。
+2. 如果 LLM 表示"我完成了"（`StopReason::Stop`），返回其文本。
+3. 如果 LLM 表示"我需要工具"（`StopReason::ToolUse`），执行工具调用。
+4. 将助手的回合和工具结果追加到消息历史中。
+5. 回到第 1 步。
 
-That is the entire architecture of every coding agent -- Claude Code, Cursor,
-OpenCode, Copilot. The details vary (streaming, parallel tool calls, safety
-checks), but the core loop is always the same. And you are about to build it
-in about 30 lines of Rust.
+这就是每一个编程 Agent 的完整架构 ——Claude Code、Cursor、OpenCode、Copilot
+都是如此。细节上有所不同（流式输出、并行工具调用、安全检查），但核心循环始终
+相同。而你即将用大约 30 行 Rust 代码来构建它。
 
-## Goal
+## 目标
 
-Implement `SimpleAgent` so that:
+实现 `SimpleAgent`，使其满足：
 
-1. It holds a provider and a collection of tools.
-2. You can register tools using a builder pattern (`.tool(ReadTool::new())`).
-3. The `run()` method implements the tool-calling loop: prompt -> provider ->
-   tool calls -> tool results -> provider -> ... -> final text.
+1. 它持有一个 Provider 和一组工具。
+2. 你可以使用构建者模式（Builder Pattern）注册工具（`.tool(ReadTool::new())`）。
+3. `run()` 方法实现工具调用循环：提示 -> Provider -> 工具调用 -> 工具结果 ->
+   Provider -> ... -> 最终文本。
 
-## Key Rust concepts
+## 关键 Rust 概念
 
-### Generics with trait bounds
+### 带特征约束的泛型（Generics with Trait Bounds）
 
 ```rust
 pub struct SimpleAgent<P: Provider> {
@@ -61,41 +59,39 @@ pub struct SimpleAgent<P: Provider> {
 }
 ```
 
-The `<P: Provider>` means `SimpleAgent` is generic over any type that
-implements the `Provider` trait. When you use `MockProvider`, the compiler
-generates code specialized for `MockProvider`. When you use
-`OpenRouterProvider`, it generates code for that type. Same logic, different
-providers.
+`<P: Provider>` 意味着 `SimpleAgent` 对任何实现了 `Provider` 特征的类型都是
+泛型的。当你使用 `MockProvider` 时，编译器会生成专门针对 `MockProvider` 的
+代码。当你使用 `OpenRouterProvider` 时，它会为该类型生成代码。逻辑相同，
+Provider 不同。
 
-### `ToolSet` -- a HashMap of trait objects
+### `ToolSet` ——特征对象的 HashMap
 
-The `tools` field is a `ToolSet`, which wraps a `HashMap<String, Box<dyn Tool>>`
-internally. Each value is a heap-allocated *trait object* that implements `Tool`,
-but the concrete types can differ. One might be a `ReadTool`, the next a
-`BashTool`. The HashMap key is the tool's name, giving O(1) lookup when executing
-tool calls.
+`tools` 字段是一个 `ToolSet`，它内部封装了一个
+`HashMap<String, Box<dyn Tool>>`。每个值都是一个堆分配的*特征对象（Trait
+Object）*，它实现了 `Tool`，但具体类型可以不同。一个可能是 `ReadTool`，另一个
+可能是 `BashTool`。HashMap 的键是工具的名称，在执行工具调用时可以实现 O(1)
+查找。
 
-Why trait objects (`Box<dyn Tool>`) instead of generics? Because you need a
-**heterogeneous collection**. A `Vec<T>` requires all elements to be the same
-type. With `Box<dyn Tool>`, you erase the concrete type and store them all
-behind the same interface.
+为什么使用特征对象（`Box<dyn Tool>`）而不是泛型？因为你需要一个**异构集合
+（Heterogeneous Collection）**。`Vec<T>` 要求所有元素都是相同类型。而
+`Box<dyn Tool>` 可以擦除具体类型，将它们全部存储在同一个接口背后。
 
-This is why the `Tool` trait uses `#[async_trait]` -- the macro rewrites
-`async fn` into a boxed future with a uniform type across different tool
-implementations.
+这也是 `Tool` 特征使用 `#[async_trait]` 的原因——该宏将 `async fn` 重写为
+一个带有统一类型的装箱 Future（Boxed Future），使其能在不同的工具实现之间
+保持一致。
 
-### The builder pattern
+### 构建者模式（Builder Pattern）
 
-The `tool()` method takes `self` by value (not `&mut self`) and returns `Self`:
+`tool()` 方法按值接收 `self`（而不是 `&mut self`）并返回 `Self`：
 
 ```rust
 pub fn tool(mut self, t: impl Tool + 'static) -> Self {
-    // push the tool
+    // 将工具加入集合
     self
 }
 ```
 
-This lets you chain calls:
+这样你就可以链式调用：
 
 ```rust
 let agent = SimpleAgent::new(provider)
@@ -105,18 +101,17 @@ let agent = SimpleAgent::new(provider)
     .tool(EditTool::new());
 ```
 
-The `impl Tool + 'static` parameter accepts any type implementing `Tool` with
-a `'static` lifetime (meaning it does not borrow temporary data). Inside the
-method, you push it into the `ToolSet`, which boxes it and indexes it by name.
+`impl Tool + 'static` 参数接受任何实现了 `Tool` 且具有 `'static` 生命周期的
+类型（意味着它不借用临时数据）。在方法内部，你将它推入 `ToolSet`，后者会将其
+装箱并按名称索引。
 
-## The implementation
+## 实现
 
-Open `mini-claw-code-starter/src/agent.rs`. The struct definition and method
-signatures are provided.
+打开 `mini-claw-code-starter/src/agent.rs`。结构体定义和方法签名已经提供好了。
 
-### Step 1: Implement `new()`
+### 第 1 步：实现 `new()`
 
-Store the provider and initialize an empty `ToolSet`:
+存储 Provider 并初始化一个空的 `ToolSet`：
 
 ```rust
 pub fn new(provider: P) -> Self {
@@ -127,11 +122,11 @@ pub fn new(provider: P) -> Self {
 }
 ```
 
-This one is straightforward.
+这一步很简单直接。
 
-### Step 2: Implement `tool()`
+### 第 2 步：实现 `tool()`
 
-Push the tool into the set, return self:
+将工具推入集合，返回 self：
 
 ```rust
 pub fn tool(mut self, t: impl Tool + 'static) -> Self {
@@ -140,41 +135,40 @@ pub fn tool(mut self, t: impl Tool + 'static) -> Self {
 }
 ```
 
-### Step 3: Implement `run()` -- the core loop
+### 第 3 步：实现 `run()` ——核心循环
 
-This is the heart of the agent. Here is the flow:
+这是 Agent 的心脏。以下是流程：
 
-1. Collect tool definitions from all registered tools.
-2. Create a `messages` vector starting with the user's prompt.
-3. Loop:
-   a. Call `self.provider.chat(&messages, &defs)` to get an `AssistantTurn`.
-   b. Match on `turn.stop_reason`:
-      - `StopReason::Stop` -- the LLM is done, return `turn.text`.
-      - `StopReason::ToolUse` -- for each tool call:
-        1. Find the matching tool by name.
-        2. Call it with the arguments.
-        3. Collect the result.
-   c. Push the `AssistantTurn` as a `Message::Assistant`.
-   d. Push each tool result as a `Message::ToolResult`.
-   e. Continue the loop.
+1. 从所有已注册的工具中收集工具定义。
+2. 创建一个 `messages` 向量，以用户的提示作为起始。
+3. 循环：
+   a. 调用 `self.provider.chat(&messages, &defs)` 获取一个 `AssistantTurn`。
+   b. 对 `turn.stop_reason` 进行匹配：
+      - `StopReason::Stop` ——LLM 完成了，返回 `turn.text`。
+      - `StopReason::ToolUse` ——对每个工具调用：
+        1. 按名称查找匹配的工具。
+        2. 用参数调用它。
+        3. 收集结果。
+   c. 将 `AssistantTurn` 作为 `Message::Assistant` 推入。
+   d. 将每个工具结果作为 `Message::ToolResult` 推入。
+   e. 继续循环。
 
-Think about the data flow carefully. After executing tools, you push *both* the
-assistant's turn (so the LLM can see what it requested) *and* the tool results
-(so it can see what happened). This gives the LLM full context to decide what
-to do next.
+仔细思考数据流。执行工具后，你需要同时推入助手的回合（这样 LLM 能看到它请求
+了什么）*和*工具结果（这样它能看到发生了什么）。这为 LLM 提供了完整的上下文，
+以便决定下一步该做什么。
 
-### Gathering tool definitions
+### 收集工具定义
 
-At the start of `run()`, collect all tool definitions from the `ToolSet`:
+在 `run()` 的开头，从 `ToolSet` 中收集所有工具定义：
 
 ```rust
 let defs = self.tools.definitions();
 ```
 
-### The loop structure
+### 循环结构
 
-This is `single_turn()` (from Chapter 3) wrapped in a loop. Instead of
-handling just one round, we `match` on `stop_reason` inside a `loop`:
+这就是 `single_turn()`（来自第三章）包裹在循环中的版本。不再只处理一轮，而是
+在 `loop` 内部对 `stop_reason` 进行 `match`：
 
 ```rust
 loop {
@@ -183,16 +177,16 @@ loop {
     match turn.stop_reason {
         StopReason::Stop => return Ok(turn.text.unwrap_or_default()),
         StopReason::ToolUse => {
-            // Execute tool calls, collect results
-            // Push messages
+            // 执行工具调用，收集结果
+            // 推入消息
         }
     }
 }
 ```
 
-### Finding and calling tools
+### 查找和调用工具
 
-For each tool call, look it up by name in the `ToolSet`:
+对于每个工具调用，在 `ToolSet` 中按名称查找：
 
 ```rust
 println!("{}", tool_summary(call));
@@ -203,39 +197,35 @@ let content = match self.tools.get(&call.name) {
 };
 ```
 
-The `tool_summary()` helper prints each tool call to the terminal -- one line
-per tool with its key argument, so you can watch what the agent does in real
-time. For example: `[bash: cat Cargo.toml]` or `[write: src/lib.rs]`.
+`tool_summary()` 辅助函数会将每个工具调用打印到终端——每个工具一行，附带其关键
+参数，这样你就可以实时观察 Agent 在做什么。例如：`[bash: cat Cargo.toml]` 或
+`[write: src/lib.rs]`。
 
-### Error handling
+### 错误处理
 
-Tool errors are caught with `.unwrap_or_else()` and converted into a string
-that gets sent back to the LLM as a tool result. This is the same pattern from
-Chapter 3, and it is critical here because the agent loop runs multiple
-iterations. If a tool error crashed the loop, the agent would die on the first
-missing file or failed command. Instead, the LLM sees the error and can
-recover -- try a different path, adjust the command, or explain the problem.
+工具错误通过 `.unwrap_or_else()` 捕获并转换为字符串，然后作为工具结果发送回
+LLM。这与第三章中的模式相同，在这里尤为关键，因为 Agent 循环会运行多次迭代。
+如果工具错误导致循环崩溃，Agent 会在遇到第一个不存在的文件或失败的命令时就
+终止。相反，LLM 会看到错误并能够恢复——尝试不同的路径、调整命令或解释问题。
 
 ```text
 > What's in README.md?
-[read: README.md]          <-- tool fails (file not found)
-[read: Cargo.toml]         <-- LLM recovers, tries another file
+[read: README.md]          <-- 工具失败（文件未找到）
+[read: Cargo.toml]         <-- LLM 恢复，尝试另一个文件
 Here is the project info from Cargo.toml...
 ```
 
-Unknown tools are handled the same way -- an error string as the tool result,
-not a crash.
+未知工具的处理方式相同——将错误字符串作为工具结果返回，而不是崩溃。
 
-### Pushing messages
+### 推入消息
 
-After executing all tool calls for a turn, push the assistant message and the
-tool results. You need to collect results first (because the `turn` is moved
-into `Message::Assistant`):
+执行完一个回合的所有工具调用后，推入助手消息和工具结果。你需要先收集结果
+（因为 `turn` 会被移动到 `Message::Assistant` 中）：
 
 ```rust
 let mut results = Vec::new();
 for call in &turn.tool_calls {
-    // ... execute and collect (id, content) pairs
+    // ... 执行并收集 (id, content) 对
 }
 
 messages.push(Message::Assistant(turn));
@@ -244,71 +234,67 @@ for (id, content) in results {
 }
 ```
 
-The order matters: assistant message first, then tool results. This matches the
-format that LLM APIs expect.
+顺序很重要：先推入助手消息，再推入工具结果。这与 LLM API 期望的格式一致。
 
-## Running the tests
+## 运行测试
 
-Run the Chapter 5 tests:
+运行第五章的测试：
 
 ```bash
 cargo test -p mini-claw-code-starter ch5
 ```
 
-### What the tests verify
+### 测试验证的内容
 
-- **`test_ch5_text_response`**: Provider returns text immediately (no tools).
-  Agent should return that text.
-- **`test_ch5_single_tool_call`**: Provider first requests a `read` tool call,
-  then returns text. Agent should execute the tool and return the final text.
-- **`test_ch5_unknown_tool`**: Provider requests a tool that does not exist.
-  Agent should handle it gracefully (return an error string as the tool result)
-  and continue to get the final text.
-- **`test_ch5_multi_step_loop`**: Provider requests `read` twice across two
-  turns, then returns text. Verifies the loop runs multiple iterations.
-- **`test_ch5_empty_response`**: Provider returns `None` for text and no tool
-  calls. Agent should return an empty string.
-- **`test_ch5_builder_chain`**: Verifies that `.tool().tool()` chaining
-  compiles -- a compile-time check for the builder pattern.
+- **`test_ch5_text_response`**：Provider 立即返回文本（不使用工具）。Agent 应
+  返回该文本。
+- **`test_ch5_single_tool_call`**：Provider 先请求一个 `read` 工具调用，然后
+  返回文本。Agent 应执行工具并返回最终文本。
+- **`test_ch5_unknown_tool`**：Provider 请求一个不存在的工具。Agent 应优雅地
+  处理（将错误字符串作为工具结果返回）并继续获取最终文本。
+- **`test_ch5_multi_step_loop`**：Provider 在两个回合中分别请求 `read`，然后
+  返回文本。验证循环能够运行多次迭代。
+- **`test_ch5_empty_response`**：Provider 返回 `None` 作为文本且没有工具调用。
+  Agent 应返回空字符串。
+- **`test_ch5_builder_chain`**：验证 `.tool().tool()` 链式调用能够编译——这是
+  对构建者模式的编译时检查。
 
-- **`test_ch5_tool_error_propagates`**: Provider requests a `read` on a file
-  that does not exist. The error should be caught and sent back as a tool
-  result. The LLM then responds with text. Verifies the loop does not crash
-  on tool failures.
+- **`test_ch5_tool_error_propagates`**：Provider 请求对一个不存在的文件执行
+  `read`。错误应被捕获并作为工具结果发送回去。然后 LLM 返回文本。验证循环不会
+  因工具失败而崩溃。
 
-There are also additional edge-case tests (three-step loops, multi-tool
-pipelines, etc.) that will pass once your core implementation is correct.
+还有一些额外的边界情况测试（三步循环、多工具流水线等），一旦你的核心实现正确，
+它们也会通过。
 
-## Seeing it all work
+## 看它全部运作起来
 
-Once the tests pass, take a moment to appreciate what you have built. With
-about 30 lines of code in `run()`, you have a working agent loop. Here is what
-happens when a test runs `agent.run("Read test.txt")`:
+测试通过后，花点时间欣赏你所构建的成果。仅用 `run()` 中大约 30 行代码，你就
+拥有了一个可用的 Agent 循环。以下是当测试运行
+`agent.run("Read test.txt")` 时发生的事情：
 
-1. Messages: `[User("Read test.txt")]`
-2. Provider returns: tool call for `read` with `{"path": "test.txt"}`
-3. Agent calls `ReadTool::call()`, gets file contents
-4. Messages: `[User("Read test.txt"), Assistant(tool_call), ToolResult("file content")]`
-5. Provider returns: text response
-6. Agent returns the text
+1. 消息：`[User("Read test.txt")]`
+2. Provider 返回：针对 `read` 的工具调用，参数为 `{"path": "test.txt"}`
+3. Agent 调用 `ReadTool::call()`，获取文件内容
+4. 消息：`[User("Read test.txt"), Assistant(tool_call), ToolResult("file content")]`
+5. Provider 返回：文本响应
+6. Agent 返回文本
 
-The mock provider makes this deterministic and testable. But the exact same
-loop works with a real LLM provider -- you just swap `MockProvider` for
-`OpenRouterProvider`.
+Mock Provider 使整个过程确定性且可测试。但完全相同的循环也适用于真正的 LLM
+Provider——你只需将 `MockProvider` 替换为 `OpenRouterProvider`。
 
-## Recap
+## 总结
 
-The agent loop is the core of the framework:
+Agent 循环是框架的核心：
 
-- **Generics** (`<P: Provider>`) let it work with any provider.
-- **`ToolSet`** (a HashMap of `Box<dyn Tool>`) gives O(1) tool lookup by name.
-- **The builder pattern** makes setup ergonomic.
-- **Error resilience** -- tool errors are caught and sent back to the LLM, not propagated. The loop never crashes from a tool failure.
-- **The loop** is simple: call provider, match on `stop_reason`, execute tools, feed results back, repeat.
+- **泛型**（`<P: Provider>`）使其能与任何 Provider 协同工作。
+- **`ToolSet`**（`Box<dyn Tool>` 的 HashMap）通过名称实现 O(1) 的工具查找。
+- **构建者模式**使配置过程简洁优雅。
+- **错误韧性** ——工具错误被捕获并发送回 LLM，而不是向上传播。循环永远不会因工具失败而崩溃。
+- **循环**本身很简单：调用 Provider，匹配 `stop_reason`，执行工具，将结果反馈回去，重复。
 
-## What's next
+## 下一步
 
-Your agent works, but only with the mock provider. In
-[Chapter 6: The OpenRouter Provider](./ch06-http-provider.md) you will implement
-`OpenRouterProvider`, which talks to a real LLM API over HTTP. This is what
-turns your agent from a testing harness into a real, usable tool.
+你的 Agent 可以工作了，但目前只能使用 Mock Provider。在
+[第六章：OpenRouter Provider](./ch06-http-provider.md) 中，你将实现
+`OpenRouterProvider`，它通过 HTTP 与真正的 LLM API 通信。这就是将你的 Agent
+从测试工具变成真正可用工具的关键。

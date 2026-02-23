@@ -1,51 +1,47 @@
-# Chapter 7: A Simple CLI
+# 第七章：一个简单的 CLI
 
-You have built every component: a mock provider for testing, four tools, the
-agent loop, and an HTTP provider. Now it is time to wire them all into a
-working CLI.
+你已经构建了所有组件：用于测试的模拟提供者（mock provider）、四个工具、
+智能体循环（agent loop）以及 HTTP 提供者。现在是时候把它们全部组装成一个
+可以工作的 CLI 了。
 
-## Goal
+## 目标
 
-Add a `chat()` method to `SimpleAgent` and write `examples/chat.rs` so that:
+为 `SimpleAgent` 添加一个 `chat()` 方法，并编写 `examples/chat.rs`，使得：
 
-1. The agent remembers the conversation -- each prompt builds on the previous
-   ones.
-2. It prints `> `, reads a line, runs the agent, and prints the result.
-3. It shows a `thinking...` indicator while the agent works.
-4. It keeps running until the user presses Ctrl+D (EOF).
+1. 智能体能够记住对话内容——每个提示都建立在之前的对话基础上。
+2. 它打印 `> `，读取一行输入，运行智能体，然后打印结果。
+3. 在智能体工作时显示 `thinking...` 指示器。
+4. 持续运行，直到用户按下 Ctrl+D（EOF）。
 
-## The `chat()` method
+## `chat()` 方法
 
-Open `mini-claw-code-starter/src/agent.rs`. Below `run()` you will see the `chat()`
-method signature.
+打开 `mini-claw-code-starter/src/agent.rs`。在 `run()` 下方你会看到 `chat()`
+方法的签名。
 
-### Why a new method?
+### 为什么需要一个新方法？
 
-`run()` creates a fresh `Vec<Message>` each time it is called. That means the
-LLM has no memory of previous exchanges. A real CLI should carry context
-forward, so the LLM can say "I already read that file" or "as I mentioned
-earlier."
+`run()` 每次调用时都会创建一个新的 `Vec<Message>`。这意味着 LLM 没有之前
+对话的记忆。一个真正的 CLI 应该向前传递上下文，这样 LLM 才能说"我已经读过
+那个文件了"或"正如我之前提到的"。
 
-`chat()` solves this by accepting the message history from the caller:
+`chat()` 通过接受调用者传入的消息历史来解决这个问题：
 
 ```rust
 pub async fn chat(&self, messages: &mut Vec<Message>) -> anyhow::Result<String>
 ```
 
-The caller pushes `Message::User(…)` before calling, and `chat()` appends the
-assistant turns. When it returns, `messages` contains the full conversation
-history ready for the next round.
+调用者在调用前推入 `Message::User(...)`，而 `chat()` 负责追加助手的回合。
+当它返回时，`messages` 包含了完整的对话历史，可以直接用于下一轮。
 
-### The implementation
+### 实现
 
-The loop body is identical to `run()`. The only differences are:
+循环体与 `run()` 完全相同。唯一的区别是：
 
-1. Use the provided `messages` instead of creating a new vec.
-2. On `StopReason::Stop`, clone the text *before* pushing
-   `Message::Assistant(turn)` -- the push moves `turn`, so you need the text
-   first.
-3. Push `Message::Assistant(turn)` so the history includes the final response.
-4. Return the cloned text.
+1. 使用传入的 `messages` 而不是创建新的 vec。
+2. 在 `StopReason::Stop` 时，在推入 `Message::Assistant(turn)` *之前*克隆文本
+   ——因为推入操作会移动 `turn`，所以你需要先提取文本。
+3. 推入 `Message::Assistant(turn)`，使历史记录包含最终响应。
+4. 返回克隆的文本。
 
 ```rust
 pub async fn chat(&self, messages: &mut Vec<Message>) -> anyhow::Result<String> {
@@ -61,37 +57,37 @@ pub async fn chat(&self, messages: &mut Vec<Message>) -> anyhow::Result<String> 
                 return Ok(text);
             }
             StopReason::ToolUse => {
-                // Same tool execution as run() ...
+                // 与 run() 相同的工具执行逻辑 ...
             }
         }
     }
 }
 ```
 
-The `ToolUse` branch is exactly the same as in `run()`: execute each tool,
-collect results, push the assistant turn, push the tool results.
+`ToolUse` 分支与 `run()` 中完全一样：执行每个工具，收集结果，推入助手回合，
+推入工具结果。
 
-### Ownership detail
+### 所有权细节
 
-In `run()` you could do `return Ok(turn.text.unwrap_or_default())` directly
-because the function was done with `turn`. In `chat()` you also need to push
-`Message::Assistant(turn)` into the history. Since that push moves `turn`, you
-must extract the text first:
+在 `run()` 中你可以直接 `return Ok(turn.text.unwrap_or_default())`，
+因为函数不再需要 `turn` 了。在 `chat()` 中你还需要将
+`Message::Assistant(turn)` 推入历史记录。由于推入操作会移动 `turn`，
+你必须先提取文本：
 
 ```rust
 let text = turn.text.clone().unwrap_or_default();
-messages.push(Message::Assistant(turn));  // moves turn
-return Ok(text);                          // return the clone
+messages.push(Message::Assistant(turn));  // 移动 turn
+return Ok(text);                          // 返回克隆的副本
 ```
 
-This is a one-line change from `run()`, but it matters.
+相比 `run()` 这只是一行的改动，但它很重要。
 
-## The CLI
+## CLI
 
-Open `mini-claw-code-starter/examples/chat.rs`. You will see a skeleton with
-`unimplemented!()`. Replace it with the full program.
+打开 `mini-claw-code-starter/examples/chat.rs`。你会看到一个包含
+`unimplemented!()` 的骨架。把它替换成完整的程序。
 
-### Step 1: Imports
+### 第 1 步：导入
 
 ```rust
 use mini_claw_code_starter::{
@@ -100,9 +96,9 @@ use mini_claw_code_starter::{
 use std::io::{self, BufRead, Write};
 ```
 
-Note the `Message` import -- you need it to build the history vector.
+注意 `Message` 的导入——你需要它来构建历史向量。
 
-### Step 2: Create the provider and agent
+### 第 2 步：创建提供者和智能体
 
 ```rust
 let provider = OpenRouterProvider::from_env()?;
@@ -113,10 +109,10 @@ let agent = SimpleAgent::new(provider)
     .tool(EditTool::new());
 ```
 
-Same as before -- nothing new here. (In [Chapter 11](./ch11-user-input.md)
-you'll add `AskTool` here so the agent can ask you clarifying questions.)
+和之前一样——这里没有新内容。（在[第十一章](./ch11-user-input.md)中你会在这里
+添加 `AskTool`，这样智能体就可以向你提出澄清性问题。）
 
-### Step 3: The system prompt and history vector
+### 第 3 步：系统提示词和历史向量
 
 ```rust
 let cwd = std::env::current_dir()?.display().to_string();
@@ -127,25 +123,21 @@ let mut history: Vec<Message> = vec![Message::System(format!(
 ))];
 ```
 
-The system prompt is the first message in the history. It tells the LLM what
-role it should play. Two things to note:
+系统提示词（system prompt）是历史记录中的第一条消息。它告诉 LLM 应该扮演
+什么角色。有两点需要注意：
 
-1. **No tool names in the prompt.** Tool definitions are sent separately to the
-   API. The system prompt focuses on *behavior* -- be a coding agent, use
-   whatever tools are available, be concise.
+1. **提示词中不包含工具名称。** 工具定义是通过 API 单独发送的。系统提示词
+   专注于*行为*——做一个编码智能体，使用任何可用的工具，简洁精确。
 
-2. **Working directory is included.** The LLM needs to know where it is so that
-   tool calls like `read` and `bash` use correct paths. This is what real
-   coding agents do -- Claude Code, OpenCode, and Kimi CLI all inject the
-   current directory (and sometimes platform, date, etc.) into their system
-   prompts.
+2. **包含了工作目录。** LLM 需要知道自己在哪里，这样 `read` 和 `bash` 等
+   工具调用才能使用正确的路径。这正是真正的编码智能体所做的——Claude Code、
+   OpenCode 和 Kimi CLI 都会在系统提示词中注入当前目录（有时还包括平台、
+   日期等信息）。
 
-The history vector lives outside the loop and accumulates every user prompt,
-assistant response, and tool result across the entire session. The system
-prompt stays at the front, giving the LLM consistent instructions on every
-turn.
+历史向量存在于循环之外，在整个会话过程中积累每一个用户提示、助手响应和工具
+结果。系统提示词保持在最前面，在每一轮中为 LLM 提供一致的指令。
 
-### Step 4: The REPL loop
+### 第 4 步：REPL 循环
 
 ```rust
 let stdin = io::stdin();
@@ -181,79 +173,75 @@ loop {
 }
 ```
 
-A few things to note:
+几点需要注意：
 
-- **`history.push(Message::User(…))`** adds the prompt before calling the
-  agent. `chat()` will append the rest.
-- **`print!("    thinking...")`** shows a status while the agent works. The
-  `flush()` is needed because `print!` (no newline) does not flush
-  automatically.
-- **`\x1b[2K\r`** is an ANSI escape sequence: "erase entire line, move cursor
-  to column 1." This clears the `thinking...` text before printing the
-  response. It also gets cleared automatically when the agent prints a tool
-  summary (since `tool_summary()` uses the same escape).
-- **`stdout.flush()?`** after `print!` ensures the prompt and thinking
-  indicator appear immediately.
-- `read_line` returns `0` on EOF (Ctrl+D), which breaks the loop.
-- Errors from the agent are printed instead of crashing -- this keeps the
-  loop alive even if one request fails.
+- **`history.push(Message::User(...))`** 在调用智能体之前添加用户提示。
+  `chat()` 会追加剩余的内容。
+- **`print!("    thinking...")`** 在智能体工作时显示状态。需要 `flush()` 是
+  因为 `print!`（没有换行符）不会自动刷新缓冲区。
+- **`\x1b[2K\r`** 是一个 ANSI 转义序列："清除整行，将光标移到第 1 列。"
+  这会在打印响应之前清除 `thinking...` 文本。当智能体打印工具摘要时也会
+  自动清除（因为 `tool_summary()` 使用了相同的转义序列）。
+- **`stdout.flush()?`** 在 `print!` 之后确保提示符和思考指示器立即显示。
+- `read_line` 在 EOF（Ctrl+D）时返回 `0`，从而跳出循环。
+- 智能体的错误会被打印出来而不是导致崩溃——这使得即使某个请求失败，
+  循环也能继续运行。
 
-### The main function
+### main 函数
 
-Wrap everything in an async main:
+用异步 main 包裹所有内容：
 
 ```rust
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Steps 1-4 go here
+    // 第 1-4 步放在这里
     Ok(())
 }
 ```
 
-### The complete program
+### 完整程序
 
-Putting it all together, the entire program is about 45 lines. That is the
-beauty of the framework you built -- the final assembly is straightforward
-because each component has a clean interface.
+把所有内容放在一起，整个程序大约 45 行。这就是你构建的框架的优美之处——
+最终的组装非常简单直接，因为每个组件都有清晰的接口。
 
-## Running the full test suite
+## 运行完整测试套件
 
-Run the full test suite:
+运行完整的测试套件：
 
 ```bash
 cargo test -p mini-claw-code-starter
 ```
 
-This runs all tests from chapters 1 through 7. If everything passes,
-congratulations -- your agent framework is complete and fully tested.
+这会运行第 1 章到第 7 章的所有测试。如果全部通过，恭喜——你的智能体框架
+已经完成且经过了全面测试。
 
-### What the tests verify
+### 测试验证了什么
 
-The Chapter 7 tests are integration tests that combine all components:
+第 7 章的测试是集成测试，它们组合了所有组件：
 
-- **Write-then-read flows**: Write a file, read it back, verify contents.
-- **Edit flows**: Write a file, edit it, read back the result.
-- **Multi-tool pipelines**: Use bash, write, edit, and read across multiple turns.
-- **Long conversations**: Five-step tool-call sequences.
+- **写入后读取流程**：写入文件，读回内容，验证内容正确。
+- **编辑流程**：写入文件，编辑文件，读回结果。
+- **多工具流水线**：在多个回合中使用 bash、write、edit 和 read。
+- **长对话**：五步工具调用序列。
 
-There are about 10 integration tests that exercise the full agent pipeline.
+大约有 10 个集成测试，覆盖了完整的智能体流水线。
 
-## Running the chat example
+## 运行聊天示例
 
-To try it with a real LLM, you need an API key. Create a `.env` file in the
-workspace root:
+要使用真实的 LLM 进行尝试，你需要一个 API 密钥。在工作区根目录创建一个
+`.env` 文件：
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 
-Then run:
+然后运行：
 
 ```bash
 cargo run -p mini-claw-code-starter --example chat
 ```
 
-You will get an interactive prompt. Try a multi-turn conversation:
+你会看到一个交互式提示符。尝试一个多轮对话：
 
 ```text
 > List the files in the current directory
@@ -275,15 +263,14 @@ Done! I added serde to the dependencies.
 >
 ```
 
-Notice how the second prompt ("What is in Cargo.toml?") works without
-repeating context -- the LLM already knows the directory listing from the
-first exchange. That is conversation history at work.
+注意第二个提示（"What is in Cargo.toml?"）无需重复上下文就能正常工作——
+LLM 已经从第一次交互中知道了目录列表。这就是对话历史的作用。
 
-Press Ctrl+D (or Ctrl+C) to exit.
+按 Ctrl+D（或 Ctrl+C）退出。
 
-## What you have built
+## 你已经构建了什么
 
-Let's step back and look at the complete picture:
+让我们退后一步，看看完整的全貌：
 
 ```text
 examples/chat.rs
@@ -302,7 +289,7 @@ SimpleAgent<OpenRouterProvider>
               +---> EditTool
 ```
 
-The `chat()` method drives the interaction:
+`chat()` 方法驱动整个交互过程：
 
 ```text
 User prompt
@@ -323,39 +310,34 @@ Tool calls? ----yes---> Execute tools ---> append to history ---> loop
 Append final Assistant to history, return text
 ```
 
-In about 300 lines of Rust across all files, you have:
+在所有文件中大约 300 行 Rust 代码，你已经拥有了：
 
-- A trait-based tool system with JSON schema definitions.
-- A generic agent loop that works with any provider.
-- A mock provider for deterministic testing.
-- An HTTP provider for real LLM APIs.
-- A CLI with conversation memory that ties it all together.
+- 一个基于 trait 的工具系统，带有 JSON schema 定义。
+- 一个通用的智能体循环，可以与任何提供者配合使用。
+- 一个用于确定性测试的模拟提供者。
+- 一个用于真实 LLM API 的 HTTP 提供者。
+- 一个带有对话记忆的 CLI，将所有这些串联在一起。
 
-## Where to go from here
+## 接下来的方向
 
-This framework is intentionally minimal. Here are ideas for extending it:
+这个框架是有意做得精简的。以下是一些扩展思路：
 
-**Streaming responses** -- Instead of waiting for the full response, stream
-tokens as they arrive. This means changing `chat()` to return a `Stream`
-instead of a single `AssistantTurn`.
+**流式响应（Streaming responses）** ——不再等待完整响应，而是在 token 到达时
+逐步输出。这意味着需要将 `chat()` 改为返回 `Stream` 而不是单个
+`AssistantTurn`。
 
-**Token limits** -- Track token usage and truncate old messages when the context
-window fills up.
+**Token 限制** ——跟踪 token 使用量，当上下文窗口满时截断旧消息。
 
-**More tools** -- Add a web search tool, a database query tool, or anything
-else you can imagine. The `Tool` trait makes it easy to plug in new
-capabilities.
+**更多工具** ——添加网络搜索工具、数据库查询工具，或者任何你能想到的工具。
+`Tool` trait 使得添加新功能变得很容易。
 
-**A richer UI** -- Add a spinner animation, markdown rendering, or collapsed
-tool call display. See `mini-claw-code/examples/tui.rs` for an example that does
-all three using `termimad`.
+**更丰富的 UI** ——添加旋转动画、Markdown 渲染或折叠式工具调用显示。
+参见 `mini-claw-code/examples/tui.rs`，其中使用 `termimad` 实现了这三个功能。
 
-The foundation you built is solid. Every extension is a matter of adding to the
-existing patterns, not rewriting them. The `Provider` trait, the `Tool` trait,
-and the agent loop are the building blocks for anything you want to build next.
+你构建的基础是扎实的。每一个扩展都只是在现有模式上添加内容，而不是重写。
+`Provider` trait、`Tool` trait 和智能体循环是你接下来想要构建的一切的基石。
 
-## What's next
+## 下一步
 
-Head to [Chapter 8: The Singularity](./ch08-singularity.md) -- your
-agent can now modify its own source code, and we will talk about what that
-means and where to go from here.
+前往[第八章：奇点](./ch08-singularity.md)——你的智能体现在可以修改它自己的
+源代码了，我们将讨论这意味着什么，以及接下来该何去何从。

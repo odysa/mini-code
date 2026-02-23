@@ -1,27 +1,27 @@
-# Chapter 1: Core Types
+# 第一章：核心类型
 
-In this chapter you will understand the types that make up the agent protocol --
-`StopReason`, `AssistantTurn`, `Message`, and the `Provider` trait. These are
-the building blocks everything else is built on.
+在本章中，你将了解组成 agent 协议的各种类型——
+`StopReason`、`AssistantTurn`、`Message` 以及 `Provider` trait。它们是
+构建所有其他功能的基石。
 
-To verify your understanding, you will implement a small test helper:
-`MockProvider`, a struct that returns pre-configured responses so that you can
-test future chapters without an API key.
+为了验证你的理解，你将实现一个小型测试辅助工具：
+`MockProvider`，一个返回预配置响应的结构体，让你在没有 API 密钥的情况下
+测试后续章节的代码。
 
-## Goal
+## 目标
 
-Understand the core types, then implement `MockProvider` so that:
+理解核心类型，然后实现 `MockProvider`，使其满足以下要求：
 
-1. You create it with a `VecDeque<AssistantTurn>` of canned responses.
-2. Each call to `chat()` returns the next response in sequence.
-3. If all responses have been consumed, it returns an error.
+1. 使用一个包含预设响应的 `VecDeque<AssistantTurn>` 来创建它。
+2. 每次调用 `chat()` 返回序列中的下一个响应。
+3. 如果所有响应都已消费完毕，则返回一个错误。
 
-## The core types
+## 核心类型
 
-Open `mini-claw-code-starter/src/types.rs`. These types define the protocol
-between the agent and any LLM backend.
+打开 `mini-claw-code-starter/src/types.rs`。这些类型定义了
+agent 与任何 LLM 后端之间的协议。
 
-Here is how they relate to each other:
+以下是它们之间的关系：
 
 ```mermaid
 classDiagram
@@ -70,10 +70,10 @@ classDiagram
     Message --> AssistantTurn : wraps
 ```
 
-`Provider` takes in messages and tool definitions, and returns an
-`AssistantTurn`. The turn's `stop_reason` tells you what to do next.
+`Provider` 接收消息和工具定义，返回一个
+`AssistantTurn`。该回合的 `stop_reason` 告诉你接下来该做什么。
 
-### `ToolDefinition` and its builder
+### `ToolDefinition` 及其构建器
 
 ```rust
 pub struct ToolDefinition {
@@ -83,24 +83,23 @@ pub struct ToolDefinition {
 }
 ```
 
-Each tool declares a `ToolDefinition` that tells the LLM what it can do. The
-`parameters` field is a JSON Schema object describing the tool's arguments.
+每个工具（tool）声明一个 `ToolDefinition`，告诉 LLM 它能做什么。
+`parameters` 字段是一个 JSON Schema 对象，描述该工具的参数。
 
-Rather than building JSON by hand every time, `ToolDefinition` has a builder
-API:
+与其每次手动构建 JSON，`ToolDefinition` 提供了一个构建器（builder）API：
 
 ```rust
 ToolDefinition::new("read", "Read the contents of a file.")
     .param("path", "string", "The file path to read", true)
 ```
 
-- `new(name, description)` creates a definition with an empty parameter schema.
-- `param(name, type, description, required)` adds a parameter and returns
-  `self`, so you can chain calls.
+- `new(name, description)` 创建一个带有空参数 schema 的定义。
+- `param(name, type, description, required)` 添加一个参数并返回
+  `self`，因此你可以链式调用。
 
-You will use this builder in every tool starting from Chapter 2.
+从第二章开始，你将在每个工具中使用这个构建器。
 
-### `StopReason` and `AssistantTurn`
+### `StopReason` 和 `AssistantTurn`
 
 ```rust
 pub enum StopReason {
@@ -115,7 +114,7 @@ pub struct AssistantTurn {
 }
 ```
 
-The `ToolCall` struct holds a single tool invocation:
+`ToolCall` 结构体保存单次工具调用的信息：
 
 ```rust
 pub struct ToolCall {
@@ -125,21 +124,19 @@ pub struct ToolCall {
 }
 ```
 
-Each tool call has an `id` (for matching results back to requests), a `name`
-(which tool to call), and `arguments` (a JSON value the tool will parse).
+每个工具调用都有一个 `id`（用于将结果匹配回请求）、一个 `name`
+（调用哪个工具）和 `arguments`（工具将要解析的 JSON 值）。
 
-Every response from the LLM comes with a `stop_reason` that tells you *why*
-the model stopped generating:
+LLM 的每个响应都带有一个 `stop_reason`，告诉你模型*为什么*停止生成：
 
-- **`StopReason::Stop`** -- the model is done. Check `text` for the response.
-- **`StopReason::ToolUse`** -- the model wants to call tools. Check `tool_calls`.
+- **`StopReason::Stop`** -- 模型已完成。检查 `text` 获取响应内容。
+- **`StopReason::ToolUse`** -- 模型想要调用工具。检查 `tool_calls`。
 
-This is the raw LLM protocol: the model tells you what to do next. In
-Chapter 3 you will write a function that explicitly `match`es on
-`stop_reason` to handle each case. In Chapter 5 you will wrap that match
-inside a loop to create the full agent.
+这就是原始的 LLM 协议：模型告诉你接下来该做什么。在第三章中，
+你将编写一个函数，显式地对 `stop_reason` 进行 `match` 来处理每种情况。
+在第五章中，你将把该 match 包裹在一个循环中，创建完整的 agent。
 
-### The `Provider` trait
+### `Provider` trait
 
 ```rust
 pub trait Provider: Send + Sync {
@@ -151,21 +148,20 @@ pub trait Provider: Send + Sync {
 }
 ```
 
-This says: "A Provider is something that can take a slice of messages and a
-slice of tool definitions, and asynchronously return an `AssistantTurn`."
+这段代码的意思是："一个 Provider 是能够接收一组消息和一组工具定义，
+并异步返回一个 `AssistantTurn` 的东西。"
 
-The `Send + Sync` bounds mean the provider must be safe to share across
-threads. This is important because `tokio` (the async runtime) may move tasks
-between threads.
+`Send + Sync` 约束意味着 provider 必须可以安全地在线程间共享。
+这很重要，因为 `tokio`（异步运行时）可能会在线程之间移动任务。
 
-Notice that `chat()` takes `&self`, not `&mut self`. The real provider
-(`OpenRouterProvider`) does not need mutation -- it just fires HTTP requests.
-Making the trait `&mut self` would force every caller to hold exclusive access,
-which is unnecessarily restrictive. The trade-off: `MockProvider` (a test
-helper) *does* need to mutate its response list, so it must use interior
-mutability to conform to the trait.
+注意 `chat()` 接收的是 `&self` 而不是 `&mut self`。真正的 provider
+（`OpenRouterProvider`）不需要可变性——它只是发送 HTTP 请求。
+如果将 trait 设计为 `&mut self`，就会强制每个调用者持有独占访问权，
+这是不必要的限制。代价是：`MockProvider`（测试辅助工具）*确实*
+需要修改其响应列表，因此它必须使用内部可变性（interior mutability）
+来遵守该 trait。
 
-### The `Message` enum
+### `Message` 枚举
 
 ```rust
 pub enum Message {
@@ -176,44 +172,39 @@ pub enum Message {
 }
 ```
 
-The conversation history is a list of `Message` values:
+对话历史是一个 `Message` 值的列表：
 
-- **`System(text)`** -- a system prompt that sets the agent's role and behavior.
-  Typically the first message in the history.
-- **`User(text)`** -- a prompt from the user.
-- **`Assistant(turn)`** -- a response from the LLM (text, tool calls, or both).
-- **`ToolResult { id, content }`** -- the result of executing a tool call. The
-  `id` matches the `ToolCall::id` so the LLM knows which call this result
-  belongs to.
+- **`System(text)`** -- 系统提示词，设置 agent 的角色和行为。
+  通常是历史记录中的第一条消息。
+- **`User(text)`** -- 来自用户的提示。
+- **`Assistant(turn)`** -- 来自 LLM 的响应（文本、工具调用或两者兼有）。
+- **`ToolResult { id, content }`** -- 执行工具调用的结果。
+  `id` 与 `ToolCall::id` 匹配，以便 LLM 知道该结果属于哪个调用。
 
-You will use these variants starting in Chapter 3 when building the
-`single_turn()` function.
+从第三章构建 `single_turn()` 函数开始，你将使用这些变体。
 
-### Why `Provider` uses `impl Future` but `Tool` uses `#[async_trait]`
+### 为什么 `Provider` 使用 `impl Future` 而 `Tool` 使用 `#[async_trait]`
 
-You may notice in Chapter 2 that the `Tool` trait uses `#[async_trait]` while
-`Provider` uses `impl Future` directly. The difference is about how the trait
-is used:
+你可能会注意到，在第二章中 `Tool` trait 使用了 `#[async_trait]`，而
+`Provider` 直接使用 `impl Future`。区别在于 trait 的使用方式：
 
-- **`Provider`** is used *generically* (`SimpleAgent<P: Provider>`). The
-  compiler knows the concrete type at compile time, so `impl Future` works.
-- **`Tool`** is stored as a *trait object* (`Box<dyn Tool>`) in a collection of
-  different tool types. Trait objects require a uniform return type, which
-  `#[async_trait]` provides by boxing the future.
+- **`Provider`** 以*泛型*方式使用（`SimpleAgent<P: Provider>`）。
+  编译器在编译时知道具体类型，因此 `impl Future` 可以工作。
+- **`Tool`** 作为 *trait 对象*（`Box<dyn Tool>`）存储在一个包含不同工具类型的集合中。
+  Trait 对象需要统一的返回类型，`#[async_trait]` 通过对 future 进行装箱来提供这一点。
 
-When implementing a trait that uses `impl Future`, you can simply write
-`async fn` in the `impl` block -- Rust desugars it to the `impl Future` form
-automatically. So while the trait *definition* says `-> impl Future<...>`,
-your *implementation* can just write `async fn chat(...)`.
+当实现使用 `impl Future` 的 trait 时，你可以在 `impl` 块中直接写
+`async fn`——Rust 会自动将其脱糖为 `impl Future` 形式。所以虽然
+trait *定义*写的是 `-> impl Future<...>`，你的*实现*可以直接写
+`async fn chat(...)`。
 
-If this distinction is unclear now, it will click in Chapter 5 when you see
-both patterns in action.
+如果现在还不太理解这个区别，到第五章看到两种模式同时使用时就会豁然开朗。
 
-### `ToolSet` -- a collection of tools
+### `ToolSet` -- 工具集合
 
-One more type you will use starting in Chapter 3: `ToolSet`. It wraps a
-`HashMap<String, Box<dyn Tool>>` and indexes tools by name, giving O(1)
-lookup when executing tool calls. You build one with a builder:
+还有一个类型你将从第三章开始使用：`ToolSet`。它包装了一个
+`HashMap<String, Box<dyn Tool>>`，按名称索引工具，在执行工具调用时
+提供 O(1) 查找。你可以用构建器来创建它：
 
 ```rust
 let tools = ToolSet::new()
@@ -221,27 +212,25 @@ let tools = ToolSet::new()
     .with(BashTool::new());
 ```
 
-You do not need to implement `ToolSet` -- it is provided in `types.rs`.
+你不需要实现 `ToolSet`——它已经在 `types.rs` 中提供。
 
-## Implementing `MockProvider`
+## 实现 `MockProvider`
 
-Now that you understand the types, let's put them to use. `MockProvider` is a
-test helper -- it implements `Provider` by returning canned responses instead of
-calling a real LLM. You will use it throughout chapters 2--5 to test tools and
-the agent loop without needing an API key.
+现在你已经理解了这些类型，让我们付诸实践。`MockProvider` 是一个
+测试辅助工具——它通过返回预设响应而不是调用真实 LLM 来实现 `Provider`。
+你将在第 2 到第 5 章中使用它来测试工具和 agent 循环，而无需 API 密钥。
 
-Open `mini-claw-code-starter/src/mock.rs`. You will see the struct and method
-signatures already laid out with `unimplemented!()` bodies.
+打开 `mini-claw-code-starter/src/mock.rs`。你会看到结构体和方法签名
+已经布置好，函数体为 `unimplemented!()`。
 
-### Interior mutability with `Mutex`
+### 使用 `Mutex` 实现内部可变性
 
-`MockProvider` needs to *remove* responses from a list each time `chat()`
-is called. But `chat()` takes `&self`. How do we mutate through a shared
-reference?
+`MockProvider` 需要在每次调用 `chat()` 时从列表中*移除*响应。
+但 `chat()` 接收的是 `&self`。如何通过共享引用进行修改呢？
 
-Rust's `std::sync::Mutex` provides interior mutability: you wrap a value in a
-`Mutex`, and calling `.lock().unwrap()` gives you a mutable guard even through
-`&self`. The lock ensures only one thread accesses the data at a time.
+Rust 的 `std::sync::Mutex` 提供了内部可变性（interior mutability）：
+你将值包装在 `Mutex` 中，调用 `.lock().unwrap()` 即可获得一个可变的守卫（guard），
+即使是通过 `&self`。锁确保同一时间只有一个线程访问数据。
 
 ```rust
 use std::collections::VecDeque;
@@ -258,17 +247,17 @@ impl MyState {
 }
 ```
 
-### Step 1: The struct fields
+### 第一步：结构体字段
 
-The struct already has the field you need: a `Mutex<VecDeque<AssistantTurn>>`
-to hold the responses. This is provided so that the method signatures compile.
-Your job is to implement the methods that use this field.
+结构体已经有了你需要的字段：一个 `Mutex<VecDeque<AssistantTurn>>`
+用于保存响应。这是预先提供的，以便方法签名能够编译通过。
+你的任务是实现使用该字段的方法。
 
-### Step 2: Implement `new()`
+### 第二步：实现 `new()`
 
-The `new()` method receives a `VecDeque<AssistantTurn>`. We want FIFO order --
-each call to `chat()` should return the *first* remaining response, not the
-last. `VecDeque::pop_front()` does exactly that in O(1):
+`new()` 方法接收一个 `VecDeque<AssistantTurn>`。我们需要 FIFO 顺序——
+每次调用 `chat()` 应该返回*第一个*剩余的响应，而不是最后一个。
+`VecDeque::pop_front()` 恰好以 O(1) 的时间复杂度完成这项工作：
 
 ```mermaid
 flowchart LR
@@ -281,61 +270,58 @@ flowchart LR
     C -. "next call" .-> out3["chat() → C"]
 ```
 
-So in `new()`:
-1. Wrap the input deque in a `Mutex`.
-2. Store it in `Self`.
+因此在 `new()` 中：
+1. 将输入的 deque 包装在 `Mutex` 中。
+2. 存储到 `Self` 中。
 
-### Step 3: Implement `chat()`
+### 第三步：实现 `chat()`
 
-The `chat()` method should:
-1. Lock the mutex.
-2. `pop_front()` the next response.
-3. If there is one, return `Ok(response)`.
-4. If the deque is empty, return an error.
+`chat()` 方法应该：
+1. 锁定 mutex。
+2. `pop_front()` 取出下一个响应。
+3. 如果有响应，返回 `Ok(response)`。
+4. 如果 deque 为空，返回一个错误。
 
-The mock provider intentionally ignores the `messages` and `tools` parameters.
-It does not care what the "user" said -- it just returns the next canned
-response.
+mock provider 有意忽略 `messages` 和 `tools` 参数。
+它不关心"用户"说了什么——只是返回下一个预设响应。
 
-A useful pattern for converting `Option` to `Result`:
+将 `Option` 转换为 `Result` 的一个实用模式：
 
 ```rust
 some_option.ok_or_else(|| anyhow::anyhow!("no more responses"))
 ```
 
-## Running the tests
+## 运行测试
 
-Run the Chapter 1 tests:
+运行第一章的测试：
 
 ```bash
 cargo test -p mini-claw-code-starter ch1
 ```
 
-### What the tests verify
+### 测试验证内容
 
-- **`test_ch1_returns_text`**: Creates a `MockProvider` with one response
-  containing text. Calls `chat()` once and checks the text matches.
-- **`test_ch1_returns_tool_calls`**: Creates a provider with one response
-  containing a tool call. Verifies the tool call name and id.
-- **`test_ch1_steps_through_sequence`**: Creates a provider with three
-  responses. Calls `chat()` three times and verifies they come back in the
-  correct order (First, Second, Third).
+- **`test_ch1_returns_text`**：创建一个包含一个文本响应的 `MockProvider`。
+  调用一次 `chat()` 并检查文本是否匹配。
+- **`test_ch1_returns_tool_calls`**：创建一个包含一个工具调用响应的 provider。
+  验证工具调用的名称和 id。
+- **`test_ch1_steps_through_sequence`**：创建一个包含三个响应的 provider。
+  调用 `chat()` 三次，验证它们按正确顺序返回（First、Second、Third）。
 
-These are the core tests. There are also additional edge-case tests (empty
-responses, exhausted queue, multiple tool calls, etc.) that will pass once
-your core implementation is correct.
+这些是核心测试。还有一些额外的边界情况测试（空响应、队列耗尽、
+多个工具调用等），一旦你的核心实现正确，它们也会通过。
 
-## Recap
+## 回顾
 
-You have learned the core types that define the agent protocol:
-- **`StopReason`** tells you whether the LLM is done or wants to call tools.
-- **`AssistantTurn`** carries the LLM's response -- text, tool calls, or both.
-- **`Provider`** is the trait any LLM backend implements.
+你已经学习了定义 agent 协议的核心类型：
+- **`StopReason`** 告诉你 LLM 是已完成还是想要调用工具。
+- **`AssistantTurn`** 承载 LLM 的响应——文本、工具调用或两者兼有。
+- **`Provider`** 是任何 LLM 后端都要实现的 trait。
 
-You also built `MockProvider`, a test helper you will use throughout the next
-four chapters to simulate LLM conversations without HTTP requests.
+你还构建了 `MockProvider`，一个测试辅助工具，你将在接下来的四章中
+使用它来模拟 LLM 对话，无需 HTTP 请求。
 
-## What's next
+## 下一步
 
-In [Chapter 2: Your First Tool](./ch02-first-tool.md) you will implement the
-`ReadTool` -- a tool that reads file contents and returns them to the LLM.
+在[第二章：你的第一个工具](./ch02-first-tool.md)中，你将实现
+`ReadTool`——一个读取文件内容并将其返回给 LLM 的工具。

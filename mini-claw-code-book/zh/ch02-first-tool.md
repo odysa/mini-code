@@ -1,24 +1,23 @@
-# Chapter 2: Your First Tool
+# 第二章：你的第一个工具（Tool）
 
-Now that you have a mock provider, it is time to build your first tool. You will
-implement `ReadTool` -- a tool that reads a file and returns its contents. This
-is the simplest tool in our agent, but it introduces the `Tool` trait pattern
-that every other tool follows.
+现在你已经有了一个 mock provider，是时候构建你的第一个工具了。你将实现
+`ReadTool` —— 一个读取文件并返回其内容的工具。这是我们 agent 中最简单的工具，
+但它引入了所有其他工具都遵循的 `Tool` trait 模式。
 
-## Goal
+## 目标
 
-Implement `ReadTool` so that:
+实现 `ReadTool`，使其满足以下要求：
 
-1. It declares its name, description, and parameter schema.
-2. When called with a `{"path": "some/file.txt"}` argument, it reads the file
-   and returns its contents as a string.
-3. Missing arguments or non-existent files produce errors.
+1. 声明其名称、描述和参数 schema。
+2. 当以 `{"path": "some/file.txt"}` 作为参数调用时，读取文件并以字符串形式返回
+   其内容。
+3. 缺少参数或文件不存在时产生错误。
 
-## Key Rust concepts
+## 关键 Rust 概念
 
-### The `Tool` trait
+### `Tool` trait
 
-Open `mini-claw-code-starter/src/types.rs` and look at the `Tool` trait:
+打开 `mini-claw-code-starter/src/types.rs`，查看 `Tool` trait：
 
 ```rust
 #[async_trait::async_trait]
@@ -28,13 +27,12 @@ pub trait Tool: Send + Sync {
 }
 ```
 
-Two methods:
+两个方法：
 
-- **`definition()`** returns metadata about the tool: its name, a description,
-  and a JSON schema describing its parameters. The LLM uses this to decide which
-  tool to call and how to format the arguments.
-- **`call()`** actually executes the tool. It receives a `serde_json::Value`
-  containing the arguments and returns a string result.
+- **`definition()`** 返回工具的元数据：名称、描述，以及描述其参数的 JSON Schema。
+  LLM 使用这些信息来决定调用哪个工具以及如何格式化参数。
+- **`call()`** 实际执行工具。它接收一个包含参数的 `serde_json::Value`，并返回
+  一个字符串结果。
 
 ### `ToolDefinition`
 
@@ -46,136 +44,129 @@ pub struct ToolDefinition {
 }
 ```
 
-As you saw in Chapter 1, `ToolDefinition` has a builder API for declaring
-parameters. For ReadTool, we need a single required parameter called `"path"`
-of type `"string"`:
+正如你在第一章中看到的，`ToolDefinition` 有一个用于声明参数的 builder API。对于
+ReadTool，我们需要一个名为 `"path"`、类型为 `"string"` 的必填参数：
 
 ```rust
 ToolDefinition::new("read", "Read the contents of a file.")
     .param("path", "string", "The file path to read", true)
 ```
 
-Under the hood, the builder constructs the JSON Schema you saw in Chapter 1.
-The last argument (`true`) marks the parameter as required.
+在底层，builder 构造了你在第一章中看到的 JSON Schema。最后一个参数（`true`）
+将该参数标记为必填。
 
-### Why `#[async_trait]` instead of plain `async fn`?
+### 为什么使用 `#[async_trait]` 而不是普通的 `async fn`？
 
-You might wonder why we use the `async_trait` macro instead of writing
-`async fn` directly in the trait. The reason is **trait object compatibility**.
+你可能会好奇，为什么我们使用 `async_trait` 宏而不是直接在 trait 中编写
+`async fn`。原因是**trait 对象兼容性（trait object compatibility）**。
 
-Later, in the agent loop, we will store tools in a `ToolSet` -- a HashMap-backed
-collection of different tool types behind a common interface. This requires
-*dynamic dispatch*, which means the compiler needs to know the size of the
-return type at compile time.
+稍后在 agent 循环中，我们会将工具存储在一个 `ToolSet` 中 —— 一个基于 HashMap
+的集合，通过统一接口存放不同类型的工具。这需要*动态分发（dynamic dispatch）*，
+意味着编译器需要在编译时知道返回类型的大小。
 
-`async fn` in traits generates a different, uniquely-sized `Future` type for
-each implementation. That breaks dynamic dispatch. The `#[async_trait]` macro
-automatically rewrites `async fn` into a method that returns
-`Pin<Box<dyn Future<...>>>`, which has a known, fixed size regardless of
-which tool produced it. You write normal `async fn` code, and the macro
-handles the boxing for you.
+trait 中的 `async fn` 会为每个实现生成不同的、大小各异的 `Future` 类型。这会破坏
+动态分发。`#[async_trait]` 宏会自动将 `async fn` 改写为返回
+`Pin<Box<dyn Future<...>>>` 的方法，无论哪个工具产生它，其大小都是固定已知的。
+你只需编写普通的 `async fn` 代码，宏会替你处理装箱（boxing）。
 
-Here is the data flow when the agent calls a tool:
+以下是 agent 调用工具时的数据流：
 
 ```mermaid
 flowchart LR
-    A["LLM returns<br/>ToolCall"] --> B["args: JSON Value<br/>{&quot;path&quot;: &quot;f.txt&quot;}"]
+    A["LLM 返回<br/>ToolCall"] --> B["args: JSON Value<br/>{&quot;path&quot;: &quot;f.txt&quot;}"]
     B --> C["Tool::call(args)"]
-    C --> D["Result: String<br/>(file contents)"]
-    D --> E["Sent back to LLM<br/>as ToolResult"]
+    C --> D["Result: String<br/>（文件内容）"]
+    D --> E["作为 ToolResult<br/>发回给 LLM"]
 ```
 
-The LLM never touches the filesystem. It produces a JSON request, your code
-executes it, and returns a string.
+LLM 从不直接接触文件系统。它产生一个 JSON 请求，你的代码执行请求，然后返回
+一个字符串。
 
-## The implementation
+## 实现
 
-Open `mini-claw-code-starter/src/tools/read.rs`. The struct, `Default` impl, and
-method signatures are already provided.
+打开 `mini-claw-code-starter/src/tools/read.rs`。结构体、`Default` 实现和方法
+签名已经提供好了。
 
-Remember to annotate your `impl Tool for ReadTool` block with
-`#[async_trait::async_trait]`. The starter file already has this in place.
+记得在你的 `impl Tool for ReadTool` 块上添加 `#[async_trait::async_trait]` 注解。
+starter 文件中已经预置了这个注解。
 
-### Step 1: Implement `new()`
+### 第一步：实现 `new()`
 
-Create a `ToolDefinition` and store it in `self.definition`. Use the builder:
+创建一个 `ToolDefinition` 并将其存储在 `self.definition` 中。使用 builder：
 
 ```rust
 ToolDefinition::new("read", "Read the contents of a file.")
     .param("path", "string", "The file path to read", true)
 ```
 
-### Step 2: `definition()` -- already provided
+### 第二步：`definition()` —— 已提供
 
-The `definition()` method is already implemented in the starter -- it simply
-returns `&self.definition`. No work needed here.
+`definition()` 方法已经在 starter 中实现了 —— 它只是简单地返回
+`&self.definition`。这里不需要做任何工作。
 
-### Step 3: Implement `call()`
+### 第三步：实现 `call()`
 
-This is where the real work happens. Your implementation should:
+这是真正的工作所在。你的实现应该：
 
-1. Extract the `"path"` argument from `args`.
-2. Read the file asynchronously.
-3. Return the file contents.
+1. 从 `args` 中提取 `"path"` 参数。
+2. 异步读取文件。
+3. 返回文件内容。
 
-Here is the shape:
+以下是大致结构：
 
 ```rust
 async fn call(&self, args: Value) -> anyhow::Result<String> {
-    // 1. Extract path
-    // 2. Read file with tokio::fs::read_to_string
-    // 3. Return contents
+    // 1. 提取 path
+    // 2. 使用 tokio::fs::read_to_string 读取文件
+    // 3. 返回内容
 }
 ```
 
-Some useful APIs:
+一些有用的 API：
 
-- `args["path"].as_str()` returns `Option<&str>`. Use `.context("missing 'path' argument")?`
-  from `anyhow` to convert `None` into a descriptive error.
-- `tokio::fs::read_to_string(path).await` reads a file asynchronously. Chain
-  `.with_context(|| format!("failed to read '{path}'"))?` for a clear error message.
+- `args["path"].as_str()` 返回 `Option<&str>`。使用来自 `anyhow` 的
+  `.context("missing 'path' argument")?` 将 `None` 转换为描述性错误。
+- `tokio::fs::read_to_string(path).await` 异步读取文件。链式调用
+  `.with_context(|| format!("failed to read '{path}'"))?` 以获得清晰的错误信息。
 
-That is it -- extract the path, read the file, return the contents.
+就是这样 —— 提取路径，读取文件，返回内容。
 
-## Running the tests
+## 运行测试
 
-Run the Chapter 2 tests:
+运行第二章的测试：
 
 ```bash
 cargo test -p mini-claw-code-starter ch2
 ```
 
-### What the tests verify
+### 测试验证内容
 
-- **`test_ch2_read_definition`**: Creates a `ReadTool` and checks that its
-  name is `"read"`, description is non-empty, and `"path"` is in the required
-  parameters.
-- **`test_ch2_read_file`**: Creates a temp file with known content, calls
-  `ReadTool` with the file path, and checks the returned content matches.
-- **`test_ch2_read_missing_file`**: Calls `ReadTool` with a path that does not
-  exist and verifies it returns an error.
-- **`test_ch2_read_missing_arg`**: Calls `ReadTool` with an empty JSON object
-  (no `"path"` key) and verifies it returns an error.
+- **`test_ch2_read_definition`**：创建一个 `ReadTool`，检查其名称是 `"read"`、
+  描述非空，且 `"path"` 在必填参数中。
+- **`test_ch2_read_file`**：创建一个包含已知内容的临时文件，用文件路径调用
+  `ReadTool`，检查返回的内容是否匹配。
+- **`test_ch2_read_missing_file`**：用一个不存在的路径调用 `ReadTool`，验证它
+  返回错误。
+- **`test_ch2_read_missing_arg`**：用一个空的 JSON 对象（没有 `"path"` 键）调用
+  `ReadTool`，验证它返回错误。
 
-There are also additional edge-case tests (empty files, unicode content,
-wrong argument types, etc.) that will pass once your core implementation is
-correct.
+还有一些额外的边界情况测试（空文件、Unicode 内容、错误的参数类型等），一旦你的
+核心实现正确，这些测试也会通过。
 
-## Recap
+## 回顾
 
-You built your first tool by implementing the `Tool` trait. The key patterns:
+你通过实现 `Tool` trait 构建了你的第一个工具。关键模式：
 
-- **`ToolDefinition::new(...).param(...)`** declares the tool's name,
-  description, and parameters.
-- **`#[async_trait::async_trait]`** on the `impl` block lets you write
-  `async fn call()` while keeping trait object compatibility.
-- **`tokio::fs`** for async file I/O.
-- **`anyhow::Context`** for adding descriptive error messages.
+- **`ToolDefinition::new(...).param(...)`** 声明工具的名称、描述和参数。
+- **`#[async_trait::async_trait]`** 放在 `impl` 块上，让你可以编写
+  `async fn call()` 同时保持 trait 对象兼容性。
+- **`tokio::fs`** 用于异步文件 I/O。
+- **`anyhow::Context`** 用于添加描述性错误信息。
 
-Every tool in the agent follows this exact same structure. Once you understand
-`ReadTool`, the remaining tools are variations on the theme.
+agent 中的每个工具都遵循完全相同的结构。一旦你理解了 `ReadTool`，其余的工具
+都是在此基础上的变体。
 
-## What's next
+## 下一步
 
-In [Chapter 3: Single Turn](./ch03-single-turn.md) you will write a function
-that matches on `StopReason` to handle a single round of tool calls.
+在[第三章：单轮调用](./ch03-single-turn.md)中，你将编写一个函数，通过匹配
+`StopReason` 来处理一轮工具调用。

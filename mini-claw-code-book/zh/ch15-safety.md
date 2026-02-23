@@ -1,5 +1,5 @@
-# Chapter 15: Safety Rails
+# 第十五章：安全护栏
 
-> This chapter is not yet written. It will cover adding confirmation prompts, command filtering, timeouts, and other safety measures to your agent.
+> 本章尚未编写。内容将涵盖为你的代理添加确认提示、命令过滤、超时机制以及其他安全措施。
 >
-> Want to contribute? [Open an issue](https://github.com/odysa/mini-claw-code/issues) or submit a PR!
+> 欢迎参与贡献！[提交 Issue](https://github.com/odysa/mini-claw-code/issues) 或发起 PR！

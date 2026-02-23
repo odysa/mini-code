@@ -1,38 +1,33 @@
-# Chapter 4: More Tools
+# 第四章：更多工具
 
-You have already implemented `ReadTool` and understand the `Tool` trait pattern.
-Now you will implement three more tools: `BashTool`, `WriteTool`, and `EditTool`.
-Each follows the same structure -- define a schema, implement `call()` -- so this
-chapter reinforces the pattern through repetition.
+你已经实现了 `ReadTool` 并理解了 `Tool` trait 模式。现在你将实现另外三个工具：`BashTool`、`WriteTool` 和 `EditTool`。每个工具都遵循相同的结构——定义 schema、实现 `call()`——因此本章通过重复练习来巩固这一模式。
 
-By the end of this chapter your agent will have all four tools it needs to
-interact with the file system and execute commands.
+在本章结束时，你的 agent 将拥有与文件系统交互和执行命令所需的全部四个工具。
 
 ```mermaid
 flowchart LR
     subgraph ToolSet
-        R["read<br/>Read a file"]
-        B["bash<br/>Run a command"]
-        W["write<br/>Write a file"]
-        E["edit<br/>Replace a string"]
+        R["read<br/>读取文件"]
+        B["bash<br/>运行命令"]
+        W["write<br/>写入文件"]
+        E["edit<br/>替换字符串"]
     end
     Agent -- "tools.get(name)" --> ToolSet
 ```
 
-## Goal
+## 目标
 
-Implement three tools:
+实现三个工具：
 
-1. **BashTool** -- run a shell command and return its output.
-2. **WriteTool** -- write content to a file, creating directories as needed.
-3. **EditTool** -- replace an exact string in a file (must appear exactly once).
+1. **BashTool**——运行 shell 命令并返回其输出。
+2. **WriteTool**——将内容写入文件，按需创建目录。
+3. **EditTool**——替换文件中的精确字符串（必须恰好出现一次）。
 
-## Key Rust concepts
+## 关键 Rust 概念
 
 ### `tokio::process::Command`
 
-Tokio provides an async wrapper around `std::process::Command`. You will use it
-in `BashTool`:
+Tokio 提供了对 `std::process::Command` 的异步（async）封装。你将在 `BashTool` 中使用它：
 
 ```rust
 let output = tokio::process::Command::new("bash")
@@ -42,13 +37,11 @@ let output = tokio::process::Command::new("bash")
     .await?;
 ```
 
-This runs `bash -c "<command>"` and captures stdout and stderr. The `output`
-struct has `stdout` and `stderr` fields as `Vec<u8>`, which you convert to
-strings with `String::from_utf8_lossy()`.
+这会运行 `bash -c "<command>"` 并捕获 stdout 和 stderr。`output` 结构体的 `stdout` 和 `stderr` 字段是 `Vec<u8>` 类型，你可以使用 `String::from_utf8_lossy()` 将它们转换为字符串。
 
-### `bail!()` macro
+### `bail!()` 宏
 
-The `anyhow::bail!()` macro is shorthand for returning an error immediately:
+`anyhow::bail!()` 宏是立即返回错误的简写形式：
 
 ```rust
 use anyhow::bail;
@@ -56,19 +49,17 @@ use anyhow::bail;
 if count == 0 {
     bail!("not found");
 }
-// equivalent to:
+// 等价于：
 // return Err(anyhow::anyhow!("not found"));
 ```
 
-You will use this in `EditTool` for validation.
+你将在 `EditTool` 中用它来进行验证。
 
-Make sure to import it: `use anyhow::{Context, bail};`. The starter file
-already includes this import in `edit.rs`.
+确保导入它：`use anyhow::{Context, bail};`。starter 文件的 `edit.rs` 中已经包含了这个导入。
 
 ### `create_dir_all`
 
-When writing a file to a path like `a/b/c/file.txt`, the parent directories
-might not exist. `tokio::fs::create_dir_all` creates the entire directory tree:
+当写入文件到类似 `a/b/c/file.txt` 的路径时，父目录可能不存在。`tokio::fs::create_dir_all` 会创建整个目录树：
 
 ```rust
 if let Some(parent) = std::path::Path::new(path).parent() {
@@ -78,33 +69,32 @@ if let Some(parent) = std::path::Path::new(path).parent() {
 
 ---
 
-## Tool 1: BashTool
+## 工具 1：BashTool
 
-Open `mini-claw-code-starter/src/tools/bash.rs`.
+打开 `mini-claw-code-starter/src/tools/bash.rs`。
 
 ### Schema
 
-Use the builder pattern you learned in Chapter 2:
+使用你在第二章学到的构建器模式（builder pattern）：
 
 ```rust
 ToolDefinition::new("bash", "Run a bash command and return its output.")
     .param("command", "string", "The bash command to run", true)
 ```
 
-### Implementation
+### 实现
 
-The `call()` method should:
+`call()` 方法应该：
 
-1. Extract `"command"` from args.
-2. Run `bash -c <command>` using `tokio::process::Command`.
-3. Capture stdout and stderr.
-4. Build a result string:
-   - Start with stdout (if non-empty).
-   - Append stderr prefixed with `"stderr: "` (if non-empty).
-   - If both are empty, return `"(no output)"`.
+1. 从 args 中提取 `"command"`。
+2. 使用 `tokio::process::Command` 运行 `bash -c <command>`。
+3. 捕获 stdout 和 stderr。
+4. 构建结果字符串：
+   - 以 stdout 开头（如果非空）。
+   - 追加以 `"stderr: "` 为前缀的 stderr（如果非空）。
+   - 如果两者都为空，返回 `"(no output)"`。
 
-Think about how you combine stdout and stderr. If both are present, you want
-them separated by a newline. Something like:
+思考一下如何组合 stdout 和 stderr。如果两者都存在，你需要用换行符分隔它们。类似这样：
 
 ```rust
 let mut result = String::new();
@@ -125,9 +115,9 @@ if result.is_empty() {
 
 ---
 
-## Tool 2: WriteTool
+## 工具 2：WriteTool
 
-Open `mini-claw-code-starter/src/tools/write.rs`.
+打开 `mini-claw-code-starter/src/tools/write.rs`。
 
 ### Schema
 
@@ -137,16 +127,16 @@ ToolDefinition::new("write", "Write content to a file, creating directories as n
     .param("content", "string", "The content to write to the file", true)
 ```
 
-### Implementation
+### 实现
 
-The `call()` method should:
+`call()` 方法应该：
 
-1. Extract `"path"` and `"content"` from args.
-2. Create parent directories if they do not exist.
-3. Write the content to the file.
-4. Return a confirmation message like `"wrote {path}"`.
+1. 从 args 中提取 `"path"` 和 `"content"`。
+2. 如果父目录不存在，则创建它们。
+3. 将内容写入文件。
+4. 返回确认消息，如 `"wrote {path}"`。
 
-For creating parent directories:
+创建父目录的方法：
 
 ```rust
 if let Some(parent) = std::path::Path::new(path).parent() {
@@ -155,7 +145,7 @@ if let Some(parent) = std::path::Path::new(path).parent() {
 }
 ```
 
-Then write the file:
+然后写入文件：
 
 ```rust
 tokio::fs::write(path, content).await
@@ -164,9 +154,9 @@ tokio::fs::write(path, content).await
 
 ---
 
-## Tool 3: EditTool
+## 工具 3：EditTool
 
-Open `mini-claw-code-starter/src/tools/edit.rs`.
+打开 `mini-claw-code-starter/src/tools/edit.rs`。
 
 ### Schema
 
@@ -177,98 +167,79 @@ ToolDefinition::new("edit", "Replace an exact string in a file (must appear exac
     .param("new_string", "string", "The replacement string", true)
 ```
 
-### Implementation
+### 实现
 
-The `call()` method is the most interesting of the bunch. It should:
+`call()` 方法是其中最有趣的。它应该：
 
-1. Extract `"path"`, `"old_string"`, and `"new_string"` from args.
-2. Read the file contents.
-3. Count how many times `old_string` appears in the content.
-4. If the count is 0, return an error: the string was not found.
-5. If the count is greater than 1, return an error: the string is ambiguous.
-6. Replace the single occurrence and write the file back.
-7. Return a confirmation like `"edited {path}"`.
+1. 从 args 中提取 `"path"`、`"old_string"` 和 `"new_string"`。
+2. 读取文件内容。
+3. 计算 `old_string` 在内容中出现的次数。
+4. 如果计数为 0，返回错误：未找到该字符串。
+5. 如果计数大于 1，返回错误：该字符串不唯一。
+6. 替换唯一的匹配项并将文件写回。
+7. 返回确认消息，如 `"edited {path}"`。
 
-The validation is important -- requiring exactly one match prevents accidental
-edits in the wrong place.
+验证很重要——要求恰好匹配一次可以防止在错误位置进行意外编辑。
 
 ```mermaid
 flowchart TD
-    A["Read file"] --> B["Count matches<br/>of old_string"]
+    A["读取文件"] --> B["计算 old_string<br/>的匹配次数"]
     B --> C{"count?"}
-    C -- "0" --> D["Error: not found"]
-    C -- "1" --> E["Replace + write file"]
-    C -- ">1" --> F["Error: ambiguous"]
-    E --> G["Return &quot;edited path&quot;"]
+    C -- "0" --> D["错误：未找到"]
+    C -- "1" --> E["替换 + 写回文件"]
+    C -- ">1" --> F["错误：不唯一"]
+    E --> G["返回 &quot;edited path&quot;"]
 ```
 
-Useful APIs:
+常用 API：
 
-- `content.matches(old).count()` counts occurrences of a substring.
-- `content.replacen(old, new, 1)` replaces the first occurrence.
-- `bail!("old_string not found in '{path}'")`  for the not-found case.
-- `bail!("old_string appears {count} times in '{path}', must be unique")` for
-  the ambiguous case.
+- `content.matches(old).count()` 计算子字符串出现的次数。
+- `content.replacen(old, new, 1)` 替换第一次出现的匹配。
+- `bail!("old_string not found in '{path}'")`  用于未找到的情况。
+- `bail!("old_string appears {count} times in '{path}', must be unique")` 用于不唯一的情况。
 
 ---
 
-## Running the tests
+## 运行测试
 
-Run the Chapter 4 tests:
+运行第四章的测试：
 
 ```bash
 cargo test -p mini-claw-code-starter ch4
 ```
 
-### What the tests verify
+### 测试验证内容
 
-**BashTool:**
-- **`test_ch4_bash_definition`**: Checks name is `"bash"` and `"command"` is
-  required.
-- **`test_ch4_bash_runs_command`**: Runs `echo hello` and checks the output
-  contains `"hello"`.
-- **`test_ch4_bash_captures_stderr`**: Runs `echo err >&2` and checks stderr
-  is captured.
-- **`test_ch4_bash_missing_arg`**: Passes empty args and expects an error.
+**BashTool：**
+- **`test_ch4_bash_definition`**：检查名称为 `"bash"` 且 `"command"` 为必填参数。
+- **`test_ch4_bash_runs_command`**：运行 `echo hello` 并检查输出包含 `"hello"`。
+- **`test_ch4_bash_captures_stderr`**：运行 `echo err >&2` 并检查 stderr 被捕获。
+- **`test_ch4_bash_missing_arg`**：传入空 args 并期望返回错误。
 
-**WriteTool:**
-- **`test_ch4_write_definition`**: Checks name is `"write"`.
-- **`test_ch4_write_creates_file`**: Writes to a temp file and reads it back.
-- **`test_ch4_write_creates_dirs`**: Writes to `a/b/c/out.txt` and verifies
-  directories were created.
-- **`test_ch4_write_missing_arg`**: Passes only `"path"` (no `"content"`) and
-  expects an error.
+**WriteTool：**
+- **`test_ch4_write_definition`**：检查名称为 `"write"`。
+- **`test_ch4_write_creates_file`**：写入临时文件并读回验证。
+- **`test_ch4_write_creates_dirs`**：写入 `a/b/c/out.txt` 并验证目录已创建。
+- **`test_ch4_write_missing_arg`**：只传入 `"path"`（无 `"content"`）并期望返回错误。
 
-**EditTool:**
-- **`test_ch4_edit_definition`**: Checks name is `"edit"`.
-- **`test_ch4_edit_replaces_string`**: Edits `"hello"` to `"goodbye"` in a file
-  containing `"hello world"` and checks the result is `"goodbye world"`.
-- **`test_ch4_edit_not_found`**: Tries to replace a string that does not exist
-  and expects an error.
-- **`test_ch4_edit_not_unique`**: Tries to replace `"a"` in a file containing
-  `"aaa"` (three occurrences) and expects an error.
+**EditTool：**
+- **`test_ch4_edit_definition`**：检查名称为 `"edit"`。
+- **`test_ch4_edit_replaces_string`**：将包含 `"hello world"` 的文件中的 `"hello"` 编辑为 `"goodbye"`，并检查结果为 `"goodbye world"`。
+- **`test_ch4_edit_not_found`**：尝试替换不存在的字符串并期望返回错误。
+- **`test_ch4_edit_not_unique`**：尝试在包含 `"aaa"`（三次出现）的文件中替换 `"a"` 并期望返回错误。
 
-There are also additional edge-case tests for each tool (wrong argument types,
-missing arguments, output format checks, etc.) that will pass once your core
-implementations are correct.
+还有针对每个工具的额外边界情况测试（错误的参数类型、缺少参数、输出格式检查等），这些测试在你的核心实现正确后就会通过。
 
-## Recap
+## 回顾
 
-You now have four tools, and they all follow the same pattern:
+你现在拥有了四个工具，它们都遵循相同的模式：
 
-1. Define a `ToolDefinition` with `::new(...).param(...)` builder calls.
-2. Return `&self.definition` from `definition()`.
-3. Add `#[async_trait::async_trait]` on the `impl Tool` block and write
-   `async fn call()`.
+1. 使用 `::new(...).param(...)` 构建器调用定义 `ToolDefinition`。
+2. 从 `definition()` 返回 `&self.definition`。
+3. 在 `impl Tool` 块上添加 `#[async_trait::async_trait]` 并编写 `async fn call()`。
 
-This is a deliberate design. The `Tool` trait makes every tool interchangeable
-from the agent's perspective. The agent does not know or care how a tool works
-internally -- it only needs the definition (to tell the LLM) and the call method
-(to execute it).
+这是有意为之的设计。`Tool` trait 使得每个工具从 agent 的角度来看都是可互换的。agent 不需要知道也不关心工具内部如何工作——它只需要 definition（用于告知 LLM）和 call 方法（用于执行）。
 
-## What's next
+## 下一步
 
-With a provider and four tools ready, it is time to connect them. In
-[Chapter 5: Your First Agent SDK!](./ch05-agent-loop.md) you will build the
-`SimpleAgent` -- the core loop that sends prompts to the provider, executes
-tool calls, and iterates until the LLM gives a final answer.
+有了 provider 和四个工具，现在是时候将它们连接起来了。在[第五章：你的第一个 Agent SDK！](./ch05-agent-loop.md)中，你将构建 `SimpleAgent`——核心循环，它向 provider 发送提示、执行工具调用，并不断迭代直到 LLM 给出最终答案。

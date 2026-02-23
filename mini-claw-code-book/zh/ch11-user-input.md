@@ -1,32 +1,24 @@
-# Chapter 11: User Input
+# 第十一章：用户输入
 
-Your agent can read files, run commands, and write code -- but it can't ask
-*you* a question. If it's unsure which approach to take, which file to target,
-or whether to proceed with a destructive operation, it just guesses.
+你的 agent 可以读取文件、运行命令、编写代码——但它无法向*你*提问。如果它不确定该采用哪种方案、操作哪个文件，或者是否要执行一个破坏性操作，它只能靠猜测。
 
-Real coding agents solve this with an **ask tool**. Claude Code has
-`AskUserQuestion`, Kimi CLI has approval prompts. The LLM calls a special tool,
-the agent pauses, and the user types an answer. The answer goes back as a tool
-result and execution continues.
+真正的编程 agent 通过 **ask tool（询问工具）** 来解决这个问题。Claude Code 有 `AskUserQuestion`，Kimi CLI 有审批提示。LLM 调用一个特殊工具，agent 暂停执行，用户输入答案。答案作为工具结果返回，执行继续。
 
-In this chapter you'll build:
+在本章中，你将构建：
 
-1. An **`InputHandler` trait** that abstracts how user input is collected.
-2. An **`AskTool`** that the LLM calls to ask the user a question.
-3. Three handler implementations: CLI, channel-based (for TUI), and mock (for
-   tests).
+1. 一个 **`InputHandler` trait**，抽象用户输入的收集方式。
+2. 一个 **`AskTool`**，供 LLM 调用来向用户提问。
+3. 三种 handler 实现：CLI、基于 channel 的（用于 TUI）以及 mock（用于测试）。
 
-## Why a trait?
+## 为什么需要 trait？
 
-Different UIs collect input differently:
+不同的 UI 以不同方式收集输入：
 
-- A **CLI** app prints to stdout and reads from stdin.
-- A **TUI** app sends a request through a channel and waits for the event loop
-  to collect the answer (maybe with arrow-key selection).
-- **Tests** need to provide canned answers without any I/O.
+- **CLI** 应用打印到 stdout 并从 stdin 读取。
+- **TUI** 应用通过 channel 发送请求，等待事件循环收集答案（可能通过方向键选择）。
+- **测试**需要提供预设答案，无需任何 I/O。
 
-The `InputHandler` trait lets `AskTool` work with all three without knowing
-which one it's using:
+`InputHandler` trait 让 `AskTool` 能与这三者配合使用，而不需要知道具体使用的是哪一个：
 
 ```rust
 #[async_trait::async_trait]
@@ -35,14 +27,11 @@ pub trait InputHandler: Send + Sync {
 }
 ```
 
-The `question` is what the LLM wants to ask. The `options` slice is an optional
-list of choices -- if empty, the user types free-text. If non-empty, the UI can
-present a selection list.
+`question` 是 LLM 想要询问的内容。`options` 切片是一个可选的选项列表——如果为空，用户输入自由文本。如果非空，UI 可以呈现一个选择列表。
 
 ## AskTool
 
-`AskTool` implements the `Tool` trait. It takes an `Arc<dyn InputHandler>` so
-the handler can be shared across threads:
+`AskTool` 实现了 `Tool` trait。它接收一个 `Arc<dyn InputHandler>`，以便 handler 可以跨线程共享：
 
 ```rust
 pub struct AskTool {
@@ -51,19 +40,16 @@ pub struct AskTool {
 }
 ```
 
-### Tool definition
+### 工具定义
 
-The LLM needs to know what parameters the tool accepts. `question` is required
-(a string). `options` is optional (an array of strings).
+LLM 需要知道工具接受哪些参数。`question` 是必需的（字符串类型）。`options` 是可选的（字符串数组）。
 
-For `options`, we need a JSON schema for an array type -- something `param()`
-can't express since it only handles scalar types. So first, add `param_raw()`
-to `ToolDefinition`:
+对于 `options`，我们需要一个数组类型的 JSON schema——`param()` 无法表达这一点，因为它只处理标量类型（scalar type）。所以首先，给 `ToolDefinition` 添加 `param_raw()`：
 
 ```rust
-/// Add a parameter with a raw JSON schema value.
+/// 使用原始 JSON schema 值添加一个参数。
 ///
-/// Use this for complex types (arrays, nested objects) that `param()` can't express.
+/// 用于 `param()` 无法表达的复杂类型（数组、嵌套对象）。
 pub fn param_raw(mut self, name: &str, schema: Value, required: bool) -> Self {
     self.parameters["properties"][name] = schema;
     if required {
@@ -76,7 +62,7 @@ pub fn param_raw(mut self, name: &str, schema: Value, required: bool) -> Self {
 }
 ```
 
-Now the tool definition uses both `param()` and `param_raw()`:
+现在工具定义同时使用 `param()` 和 `param_raw()`：
 
 ```rust
 impl AskTool {
@@ -104,8 +90,7 @@ impl AskTool {
 
 ### Tool::call
 
-The `call` implementation extracts `question`, parses options with a helper,
-and delegates to the handler:
+`call` 的实现提取 `question`，通过辅助函数解析 options，然后委托给 handler：
 
 ```rust
 #[async_trait::async_trait]
@@ -126,7 +111,7 @@ impl Tool for AskTool {
     }
 }
 
-/// Extract the optional `options` array from tool arguments.
+/// 从工具参数中提取可选的 `options` 数组。
 fn parse_options(args: &Value) -> Vec<String> {
     args.get("options")
         .and_then(|v| v.as_array())
@@ -139,16 +124,13 @@ fn parse_options(args: &Value) -> Vec<String> {
 }
 ```
 
-The `parse_options` helper keeps `call()` focused on the happy path. If
-`options` is missing or not an array, it defaults to an empty vec -- the
-handler treats this as free-text input.
+`parse_options` 辅助函数让 `call()` 专注于正常路径（happy path）。如果 `options` 缺失或不是数组，则默认为空 vec——handler 将此视为自由文本输入。
 
-## Three handlers
+## 三种 handler
 
 ### CliInputHandler
 
-The simplest handler. Prints the question, lists numbered choices (if any),
-reads a line from stdin, and resolves numbered answers:
+最简单的 handler。打印问题，列出编号选项（如果有），从 stdin 读取一行，并解析编号答案：
 
 ```rust
 pub struct CliInputHandler;
@@ -159,29 +141,29 @@ impl InputHandler for CliInputHandler {
         let question = question.to_string();
         let options = options.to_vec();
 
-        // spawn_blocking because stdin is synchronous
+        // 使用 spawn_blocking，因为 stdin 是同步的
         tokio::task::spawn_blocking(move || {
-            // Display the question and numbered choices (if any)
+            // 显示问题和编号选项（如果有）
             println!("\n  {question}");
             for (i, opt) in options.iter().enumerate() {
                 println!("    {}) {opt}", i + 1);
             }
 
-            // Read the answer
+            // 读取答案
             print!("  > ");
             io::stdout().flush()?;
             let mut line = String::new();
             io::stdin().lock().read_line(&mut line)?;
             let answer = line.trim().to_string();
 
-            // If the user typed a valid option number, resolve it
+            // 如果用户输入了有效的选项编号，则解析它
             Ok(resolve_option(&answer, &options))
         }).await?
     }
 }
 
-/// If `answer` is a number matching one of the options, return that option.
-/// Otherwise return the raw answer.
+/// 如果 `answer` 是一个匹配某个选项的数字，返回该选项。
+/// 否则返回原始答案。
 fn resolve_option(answer: &str, options: &[String]) -> String {
     if let Ok(n) = answer.parse::<usize>()
         && n >= 1
@@ -193,16 +175,11 @@ fn resolve_option(answer: &str, options: &[String]) -> String {
 }
 ```
 
-The `resolve_option` helper keeps the closure body clean. It uses **let-chain
-syntax** (stabilized in Rust 1.87 / edition 2024): multiple conditions joined
-with `&&` including `let Ok(n) = ...` pattern bindings. If the user types `"2"`
-and there are three options, it resolves to `options[1]`. Otherwise the raw text
-is returned.
+`resolve_option` 辅助函数让闭包体保持简洁。它使用了 **let-chain 语法**（在 Rust 1.87 / edition 2024 中稳定）：多个条件用 `&&` 连接，包括 `let Ok(n) = ...` 模式绑定。如果用户输入 `"2"` 且有三个选项，则解析为 `options[1]`。否则返回原始文本。
 
-Note the `for` loop over `options` does nothing when the slice is empty -- no
-special `if` branch needed.
+注意 `for` 循环在切片为空时什么都不做——不需要特殊的 `if` 分支。
 
-Use this in simple CLI apps like `examples/chat.rs`:
+在简单的 CLI 应用中使用它，例如 `examples/chat.rs`：
 
 ```rust
 let agent = SimpleAgent::new(provider)
@@ -215,8 +192,7 @@ let agent = SimpleAgent::new(provider)
 
 ### ChannelInputHandler
 
-For TUI apps, input collection happens in the event loop, not in the tool. The
-`ChannelInputHandler` bridges the gap with a channel:
+对于 TUI 应用，输入收集发生在事件循环中，而非工具内部。`ChannelInputHandler` 通过 channel 桥接这一差距：
 
 ```rust
 pub struct UserInputRequest {
@@ -230,8 +206,7 @@ pub struct ChannelInputHandler {
 }
 ```
 
-When `ask()` is called, it sends a `UserInputRequest` through the channel and
-awaits the oneshot response:
+当 `ask()` 被调用时，它通过 channel 发送一个 `UserInputRequest` 并等待 oneshot 响应：
 
 ```rust
 #[async_trait::async_trait]
@@ -248,13 +223,11 @@ impl InputHandler for ChannelInputHandler {
 }
 ```
 
-The TUI event loop receives the request and renders it however it likes --
-a simple text prompt, or an arrow-key-navigable selection list using
-`crossterm` in raw terminal mode.
+TUI 事件循环接收请求并按自己的方式渲染——可以是简单的文本提示，也可以是使用 `crossterm` 在 raw 终端模式下实现的方向键导航选择列表。
 
 ### MockInputHandler
 
-For tests, pre-configure answers in a queue:
+用于测试，在队列中预先配置答案：
 
 ```rust
 pub struct MockInputHandler {
@@ -270,49 +243,38 @@ impl InputHandler for MockInputHandler {
 }
 ```
 
-This follows the same pattern as `MockProvider` -- pop from the front, error
-when empty. Note that this uses `tokio::sync::Mutex` (with `.lock().await`),
-not `std::sync::Mutex`. The reason: `ask()` is an `async fn`, and the lock
-guard must be held across the `.await` boundary. A `std::sync::Mutex` guard is
-`!Send`, so holding it across `.await` won't compile. `tokio::sync::Mutex`
-produces a `Send`-safe guard that works in async contexts. Compare this with
-`MockProvider` from Chapter 1, which uses `std::sync::Mutex` because its
-`chat()` method doesn't hold the guard across an `.await`.
+这遵循与 `MockProvider` 相同的模式——从前端弹出，空时报错。注意这里使用的是 `tokio::sync::Mutex`（配合 `.lock().await`），而非 `std::sync::Mutex`。原因是：`ask()` 是一个 `async fn`，锁守卫（lock guard）必须跨越 `.await` 边界持有。`std::sync::Mutex` 的守卫是 `!Send` 的，因此跨 `.await` 持有它无法编译。`tokio::sync::Mutex` 产生一个 `Send` 安全的守卫，可以在异步上下文中使用。与第一章中的 `MockProvider` 对比，后者使用 `std::sync::Mutex`，因为其 `chat()` 方法不会跨 `.await` 持有守卫。
 
-## Tool summary
+## 工具摘要
 
-Update `tool_summary()` in `agent.rs` to display `"question"` for `ask_user`
-calls in the terminal output:
+更新 `agent.rs` 中的 `tool_summary()`，以便在终端输出中为 `ask_user` 调用显示 `"question"`：
 
 ```rust
 let detail = call.arguments
     .get("command")
     .or_else(|| call.arguments.get("path"))
-    .or_else(|| call.arguments.get("question"))  // <-- new
+    .or_else(|| call.arguments.get("question"))  // <-- 新增
     .and_then(|v| v.as_str());
 ```
 
-## Plan mode integration
+## Plan mode 集成
 
-`ask_user` is read-only -- it collects information without mutating anything.
-Add it to `PlanAgent`'s default `read_only` set (see
-[Chapter 12](./ch12-plan-mode.md)) so the LLM can ask questions during
-planning:
+`ask_user` 是只读的——它收集信息而不修改任何内容。将其添加到 `PlanAgent` 的默认 `read_only` 集合中（参见[第十二章](./ch12-plan-mode.md)），这样 LLM 在规划阶段也能提问：
 
 ```rust
 read_only: HashSet::from(["bash", "read", "ask_user"]),
 ```
 
-## Wiring it up
+## 接入整合
 
-Add the module to `mini-claw-code/src/tools/mod.rs`:
+将模块添加到 `mini-claw-code/src/tools/mod.rs`：
 
 ```rust
 mod ask;
 pub use ask::*;
 ```
 
-And re-export from `lib.rs`:
+并从 `lib.rs` 重新导出：
 
 ```rust
 pub use tools::{
@@ -322,39 +284,30 @@ pub use tools::{
 };
 ```
 
-## Running the tests
+## 运行测试
 
 ```bash
 cargo test -p mini-claw-code ch11
 ```
 
-The tests verify:
+测试验证了：
 
-- **Tool definition**: schema has `question` (required) and `options` (optional
-  array).
-- **Question only**: `MockInputHandler` returns answer for a question-only call.
-- **With options**: tool passes options to the handler correctly.
-- **Missing question**: missing `question` argument returns an error.
-- **Handler exhausted**: empty `MockInputHandler` returns an error.
-- **Agent loop**: LLM calls `ask_user`, gets an answer, then returns final
-  text.
-- **Ask then tool**: `ask_user` followed by another tool call (e.g. `read`).
-- **Multiple asks**: two sequential `ask_user` calls with different answers.
-- **Channel roundtrip**: `ChannelInputHandler` sends request and receives
-  response via oneshot channel.
-- **param_raw**: `param_raw()` adds array parameter to `ToolDefinition`
-  correctly.
+- **工具定义**：schema 包含 `question`（必需）和 `options`（可选数组）。
+- **仅问题**：`MockInputHandler` 为仅包含问题的调用返回答案。
+- **带选项**：工具正确地将 options 传递给 handler。
+- **缺少问题**：缺少 `question` 参数返回错误。
+- **handler 耗尽**：空的 `MockInputHandler` 返回错误。
+- **Agent 循环**：LLM 调用 `ask_user`，获取答案，然后返回最终文本。
+- **先询问再调用工具**：`ask_user` 之后跟着另一个工具调用（例如 `read`）。
+- **多次询问**：两次连续的 `ask_user` 调用，使用不同的答案。
+- **Channel 往返**：`ChannelInputHandler` 通过 oneshot channel 发送请求并接收响应。
+- **param_raw**：`param_raw()` 正确地将数组参数添加到 `ToolDefinition`。
 
-## Recap
+## 回顾
 
-- **`InputHandler` trait** abstracts input collection across CLI, TUI, and
-  tests.
-- **`AskTool`** lets the LLM pause execution and ask the user a question.
-- **`param_raw()`** extends `ToolDefinition` to support complex JSON schema
-  types like arrays.
-- **Three handlers**: `CliInputHandler` for simple apps,
-  `ChannelInputHandler` for TUI apps, `MockInputHandler` for tests.
-- **Plan mode**: `ask_user` is read-only by default, so it works during
-  planning.
-- **Purely additive**: no changes to `SimpleAgent`, `StreamingAgent`, or any
-  existing tool.
+- **`InputHandler` trait** 抽象了 CLI、TUI 和测试中的输入收集方式。
+- **`AskTool`** 让 LLM 暂停执行并向用户提问。
+- **`param_raw()`** 扩展了 `ToolDefinition`，支持数组等复杂 JSON schema 类型。
+- **三种 handler**：`CliInputHandler` 用于简单应用，`ChannelInputHandler` 用于 TUI 应用，`MockInputHandler` 用于测试。
+- **Plan mode**：`ask_user` 默认是只读的，因此在规划阶段也能使用。
+- **纯增量变更**：无需修改 `SimpleAgent`、`StreamingAgent` 或任何现有工具。

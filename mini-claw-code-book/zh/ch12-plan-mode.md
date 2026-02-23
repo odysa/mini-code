@@ -1,31 +1,25 @@
-# Chapter 12: Plan Mode
+# 第十二章：计划模式
 
-Real coding agents can be dangerous. Give an LLM access to `write`, `edit`,
-and `bash` and it might rewrite your config, delete a file, or run a
-destructive command -- all before you've had a chance to review what it's doing.
+真正的编程智能体可能是危险的。给 LLM 提供 `write`、`edit` 和 `bash` 工具，它可能会改写你的配置、删除文件，或者执行破坏性命令——而这一切都发生在你来得及审查之前。
 
-**Plan mode** solves this with a two-phase workflow:
+**计划模式（Plan Mode）** 通过两阶段工作流解决这个问题：
 
-1. **Plan** -- the agent explores the codebase using read-only tools (`read`,
-   `bash`, and `ask_user`). It cannot write, edit, or mutate anything. It
-   returns a plan describing what it intends to do.
-2. **Execute** -- after the user reviews and approves the plan, the agent runs
-   again with all tools available.
+1. **计划阶段** —— 智能体使用只读工具（`read`、`bash` 和 `ask_user`）探索代码库。它不能写入、编辑或修改任何内容。它返回一个描述其意图的计划。
+2. **执行阶段** —— 用户审查并批准计划后，智能体再次运行，此时所有工具都可用。
 
-This is exactly how Claude Code's plan mode works. In this chapter you'll build
-`PlanAgent` -- a streaming agent with caller-driven approval gating.
+这正是 Claude Code 的计划模式的工作方式。在本章中，你将构建 `PlanAgent` —— 一个带有调用方驱动的批准门控的流式智能体。
 
-You will:
+你将完成以下任务：
 
-1. Build `PlanAgent<P: StreamProvider>` with `plan()` and `execute()` methods.
-2. Inject a **system prompt** that tells the LLM it's in planning mode.
-3. Add an **`exit_plan` tool** the LLM calls when its plan is ready.
-4. Implement **double defense**: definition filtering *and* an execution guard.
-5. Let the caller drive the approval flow between phases.
+1. 构建带有 `plan()` 和 `execute()` 方法的 `PlanAgent<P: StreamProvider>`。
+2. 注入一个**系统提示词（System Prompt）**，告诉 LLM 它处于计划模式。
+3. 添加一个 **`exit_plan` 工具**，LLM 在计划就绪时调用它。
+4. 实现**双重防御**：定义过滤 *加上* 执行守卫。
+5. 让调用方驱动两个阶段之间的批准流程。
 
-## Why plan mode?
+## 为什么需要计划模式？
 
-Consider this scenario:
+考虑以下场景：
 
 ```text
 User: "Refactor auth.rs to use JWT instead of session cookies"
@@ -36,7 +30,7 @@ Agent (no plan mode):
   → you didn't want that approach at all
 ```
 
-With plan mode:
+使用计划模式：
 
 ```text
 User: "Refactor auth.rs to use JWT instead of session cookies"
@@ -53,17 +47,15 @@ Agent (execute phase):
   → calls write/edit with the approved changes
 ```
 
-The key insight: **the same agent loop works for both phases**. The only
-difference is *which tools are available*.
+关键洞察：**同一个智能体循环适用于两个阶段**。唯一的区别是*哪些工具可用*。
 
-## Design
+## 设计
 
-`PlanAgent` has the same shape as `StreamingAgent` -- a provider, a `ToolSet`,
-and an agent loop. Three additions make it a planning agent:
+`PlanAgent` 与 `StreamingAgent` 具有相同的结构 —— 一个提供者（Provider）、一个 `ToolSet` 和一个智能体循环。三个新增部分使其成为计划智能体：
 
-1. A `HashSet<&'static str>` recording which tools are allowed during planning.
-2. A **system prompt** injected at the start of the planning phase.
-3. An **`exit_plan` tool definition** the LLM calls when its plan is ready.
+1. 一个 `HashSet<&'static str>`，记录在计划阶段允许使用的工具。
+2. 一个**系统提示词**，在计划阶段开始时注入。
+3. 一个 **`exit_plan` 工具定义**，LLM 在计划就绪时调用。
 
 ```rust
 pub struct PlanAgent<P: StreamProvider> {
@@ -75,18 +67,16 @@ pub struct PlanAgent<P: StreamProvider> {
 }
 ```
 
-Two public methods drive the two phases:
+两个公开方法驱动两个阶段：
 
-- **`plan()`** -- injects the system prompt, runs the agent loop with only
-  read-only tools and `exit_plan` visible.
-- **`execute()`** -- runs the agent loop with all tools visible.
+- **`plan()`** —— 注入系统提示词，仅使用只读工具和 `exit_plan` 运行智能体循环。
+- **`execute()`** —— 使用所有工具运行智能体循环。
 
-Both delegate to a private `run_loop()` that takes an optional tool filter.
+两者都委托给一个私有的 `run_loop()`，该方法接受一个可选的工具过滤器。
 
-## The builder
+## 构建器
 
-Construction follows the same builder pattern as `SimpleAgent` and
-`StreamingAgent`:
+构造过程遵循与 `SimpleAgent` 和 `StreamingAgent` 相同的构建器模式（Builder Pattern）：
 
 ```rust
 impl<P: StreamProvider> PlanAgent<P> {
@@ -122,21 +112,15 @@ impl<P: StreamProvider> PlanAgent<P> {
 }
 ```
 
-By default, `bash`, `read`, and `ask_user` are read-only. (Chapter 11 added
-`ask_user` so the LLM can ask clarifying questions during planning.) The
-`.read_only()` method lets callers override this -- for example, to exclude
-`bash` from planning if you want a stricter mode.
+默认情况下，`bash`、`read` 和 `ask_user` 是只读的。（第十一章添加了 `ask_user`，使 LLM 可以在计划阶段提出澄清性问题。）`.read_only()` 方法允许调用方覆盖此设置——例如，如果你想要更严格的模式，可以在计划阶段排除 `bash`。
 
-The `.plan_prompt()` method lets callers override the system prompt -- useful
-for specialized agents like security auditors or code reviewers.
+`.plan_prompt()` 方法允许调用方覆盖系统提示词——这对于安全审计或代码审查等专用智能体很有用。
 
-## System prompt
+## 系统提示词
 
-The LLM needs to *know* it's in planning mode. Without this, it will try to
-accomplish the task with whatever tools it sees, rather than producing a
-deliberate plan.
+LLM 需要*知道*它处于计划模式。否则，它会尝试用它看到的任何工具来完成任务，而不是产出一个深思熟虑的计划。
 
-`plan()` injects a system prompt at the start of the conversation:
+`plan()` 在对话开始时注入一个系统提示词：
 
 ```rust
 const DEFAULT_PLAN_PROMPT: &str = "\
@@ -146,8 +130,7 @@ questions — but you CANNOT write, edit, or create files.\n\n\
 When your plan is ready, call the `exit_plan` tool to submit it for review.";
 ```
 
-The injection is conditional -- if the caller already provided a `System`
-message, `plan()` respects it:
+注入是有条件的——如果调用方已经提供了 `System` 消息，`plan()` 会尊重它：
 
 ```rust
 pub async fn plan(
@@ -165,38 +148,28 @@ pub async fn plan(
 }
 ```
 
-This means:
-- **First call**: no system message → inject the plan prompt.
-- **Re-plan call**: system message already there → skip.
-- **Caller provided their own**: caller's system message → respect it.
+这意味着：
+- **首次调用**：没有系统消息 → 注入计划提示词。
+- **重新计划**：系统消息已存在 → 跳过。
+- **调用方提供了自己的**：调用方的系统消息 → 予以保留。
 
-This is how real agents work. Claude Code switches its system prompt when
-entering plan mode. OpenCode uses entirely separate agent configurations with
-different system prompts for `plan` vs `build` agents.
+这就是真实智能体的工作方式。Claude Code 在进入计划模式时会切换其系统提示词。OpenCode 使用完全独立的智能体配置，为 `plan` 和 `build` 智能体设置不同的系统提示词。
 
-## The `exit_plan` tool
+## `exit_plan` 工具
 
-Without `exit_plan`, the planning phase ends when the LLM returns
-`StopReason::Stop` -- the same way any conversation ends. This is ambiguous:
-did the LLM finish planning, or did it just stop talking?
+如果没有 `exit_plan`，计划阶段会在 LLM 返回 `StopReason::Stop` 时结束——与任何对话的结束方式相同。这是模糊的：LLM 是完成了计划，还是只是停止了对话？
 
-Real agents solve this with an explicit signal. Claude Code has `ExitPlanMode`.
-OpenCode has `exit_plan`. The LLM calls the tool to say "my plan is ready for
-review."
+真实的智能体通过显式信号来解决这个问题。Claude Code 有 `ExitPlanMode`。OpenCode 有 `exit_plan`。LLM 调用该工具来表示"我的计划已准备好供审查"。
 
-In `PlanAgent`, `exit_plan` is a tool definition stored on the struct -- not
-registered in the `ToolSet`. This means:
+在 `PlanAgent` 中，`exit_plan` 是一个存储在结构体上的工具定义——并未注册到 `ToolSet` 中。这意味着：
 
-- During **plan**: `exit_plan` is injected into the tool list alongside
-  read-only tools. The LLM can see and call it.
-- During **execute**: `exit_plan` is not in the tool list. The LLM doesn't
-  know it exists.
+- 在**计划阶段**：`exit_plan` 与只读工具一起被注入到工具列表中。LLM 可以看到并调用它。
+- 在**执行阶段**：`exit_plan` 不在工具列表中。LLM 不知道它的存在。
 
-When the agent loop sees an `exit_plan` call, it returns immediately with the
-plan text (the LLM's text from that turn):
+当智能体循环看到 `exit_plan` 调用时，它立即返回计划文本（LLM 在该轮次的文本）：
 
 ```rust
-// Handle exit_plan: signal plan completion
+// 处理 exit_plan：标记计划完成
 if allowed.is_some() && call.name == "exit_plan" {
     results.push((call.id.clone(), "Plan submitted for review.".into()));
     exit_plan = true;
@@ -204,15 +177,14 @@ if allowed.is_some() && call.name == "exit_plan" {
 }
 ```
 
-After the tool-call loop, `plan_text` captures the LLM's text from this turn
-(the plan itself), and the turn is pushed onto the message history:
+在工具调用循环之后，`plan_text` 捕获 LLM 在本轮次的文本（即计划本身），并将该轮次推入消息历史：
 
 ```rust
 let plan_text = turn.text.clone().unwrap_or_default();
 messages.push(Message::Assistant(turn));
 ```
 
-If `exit_plan` was among the tool calls, we're done:
+如果 `exit_plan` 在工具调用中被调用，则流程结束：
 
 ```rust
 if exit_plan {
@@ -221,20 +193,19 @@ if exit_plan {
 }
 ```
 
-The planning phase now has two exit paths:
-1. **`StopReason::Stop`** -- LLM stops naturally (backward compatible).
-2. **`exit_plan` tool call** -- LLM explicitly signals plan completion.
+计划阶段现在有两条退出路径：
+1. **`StopReason::Stop`** —— LLM 自然停止（向后兼容）。
+2. **`exit_plan` 工具调用** —— LLM 显式发出计划完成信号。
 
-Both work. The `exit_plan` path is better because it's unambiguous.
+两者都有效。`exit_plan` 路径更好，因为它是明确的。
 
-## Double defense
+## 双重防御
 
-Tool filtering still uses two layers of protection:
+工具过滤仍然使用两层保护：
 
-### Layer 1: Definition filtering
+### 第一层：定义过滤
 
-During `plan()`, only read-only tool definitions plus `exit_plan` are sent to
-the LLM. The model literally cannot see `write` or `edit` in its tool list:
+在 `plan()` 期间，只有只读工具定义加上 `exit_plan` 被发送给 LLM。模型在其工具列表中完全看不到 `write` 或 `edit`：
 
 ```rust
 let all_defs = self.tools.definitions();
@@ -251,13 +222,11 @@ let defs: Vec<&ToolDefinition> = match allowed {
 };
 ```
 
-During `execute()`, `allowed` is `None`, so all registered tools are sent --
-and `exit_plan` is *not* included.
+在 `execute()` 期间，`allowed` 为 `None`，因此所有已注册的工具都会被发送——而 `exit_plan` *不会*被包含。
 
-### Layer 2: Execution guard
+### 第二层：执行守卫
 
-If the LLM somehow hallucinated a blocked tool call, the execution guard
-catches it and returns an error `ToolResult` instead of executing the tool:
+如果 LLM 以某种方式"幻觉"出一个被阻止的工具调用，执行守卫会捕获它并返回错误 `ToolResult`，而不是执行该工具：
 
 ```rust
 if let Some(names) = allowed
@@ -274,13 +243,11 @@ if let Some(names) = allowed
 }
 ```
 
-The error goes back to the LLM as a tool result, so it learns the tool is
-blocked and adjusts its behavior. The file is never touched.
+错误作为工具结果返回给 LLM，这样它就知道该工具被阻止并调整其行为。文件永远不会被触及。
 
-## The shared agent loop
+## 共享的智能体循环
 
-Both `plan()` and `execute()` delegate to `run_loop()`. The only parameter
-that differs is `allowed`:
+`plan()` 和 `execute()` 都委托给 `run_loop()`。唯一不同的参数是 `allowed`：
 
 ```rust
 pub async fn plan(
@@ -288,7 +255,7 @@ pub async fn plan(
     messages: &mut Vec<Message>,
     events: mpsc::UnboundedSender<AgentEvent>,
 ) -> anyhow::Result<String> {
-    // System prompt injection (shown earlier)
+    // 系统提示词注入（前面已展示）
     self.run_loop(messages, Some(&self.read_only), events).await
 }
 
@@ -301,25 +268,19 @@ pub async fn execute(
 }
 ```
 
-`plan()` passes `Some(&self.read_only)` to restrict tools. `execute()` passes
-`None` to allow everything.
+`plan()` 传入 `Some(&self.read_only)` 来限制工具。`execute()` 传入 `None` 来允许所有工具。
 
-The `run_loop` itself is identical to `StreamingAgent::chat()` from Chapter 10,
-with these additions:
+`run_loop` 本身与第十章中 `StreamingAgent::chat()` 完全相同，增加了以下内容：
 
-1. Tool definition filtering (read-only + `exit_plan` during plan; all during
-   execute).
-2. The `exit_plan` handler that breaks the loop when the LLM signals plan
-   completion.
-3. The execution guard for blocked tools.
+1. 工具定义过滤（计划阶段：只读工具 + `exit_plan`；执行阶段：全部工具）。
+2. `exit_plan` 处理器，当 LLM 发出计划完成信号时中断循环。
+3. 被阻止工具的执行守卫。
 
-## Caller-driven approval flow
+## 调用方驱动的批准流程
 
-The approval flow lives entirely in the caller. `PlanAgent` does not ask for
-approval -- it just runs whichever phase is called. This keeps the agent
-simple and lets the caller implement any approval UX they want.
+批准流程完全在调用方中实现。`PlanAgent` 不会请求批准——它只执行被调用的阶段。这使智能体保持简单，并允许调用方实现任何他们想要的批准用户体验。
 
-Here is the typical flow:
+以下是典型流程：
 
 ```rust
 let agent = PlanAgent::new(provider)
@@ -330,20 +291,20 @@ let agent = PlanAgent::new(provider)
 
 let mut messages = vec![Message::User("Refactor auth.rs".into())];
 
-// Phase 1: Plan (read-only tools + exit_plan)
-let (tx, _rx) = mpsc::unbounded_channel(); // consume _rx to handle streaming events
+// 阶段 1：计划（只读工具 + exit_plan）
+let (tx, _rx) = mpsc::unbounded_channel(); // 使用 _rx 处理流式事件
 let plan = agent.plan(&mut messages, tx).await?;
 println!("Plan: {plan}");
 
-// Show plan to user, get approval
+// 向用户展示计划，获取批准
 if user_approves() {
-    // Phase 2: Execute (all tools)
+    // 阶段 2：执行（所有工具）
     messages.push(Message::User("Approved. Execute the plan.".into()));
     let (tx2, _rx2) = mpsc::unbounded_channel();
     let result = agent.execute(&mut messages, tx2).await?;
     println!("Result: {result}");
 } else {
-    // Re-plan with feedback
+    // 带反馈重新计划
     messages.push(Message::User("No, try a different approach.".into()));
     let (tx3, _rx3) = mpsc::unbounded_channel();
     let revised_plan = agent.plan(&mut messages, tx3).await?;
@@ -351,40 +312,37 @@ if user_approves() {
 }
 ```
 
-Notice how the same `messages` vec is shared across phases. This is critical --
-the LLM sees its own plan, the user's approval (or rejection), and all
-previous context when it enters the execute phase. Re-planning is just
-pushing feedback as a `User` message and calling `plan()` again.
+请注意同一个 `messages` 向量在各阶段之间共享。这至关重要——当 LLM 进入执行阶段时，它能看到自己的计划、用户的批准（或拒绝）以及所有之前的上下文。重新计划只需将反馈作为 `User` 消息推入并再次调用 `plan()`。
 
 ```mermaid
 sequenceDiagram
-    participant C as Caller
+    participant C as 调用方
     participant P as PlanAgent
     participant L as LLM
 
     C->>P: plan(&mut messages)
-    P->>L: [read, bash, ask_user, exit_plan tools only]
-    L-->>P: reads files, calls exit_plan
-    P-->>C: "Plan: ..."
+    P->>L: [仅 read, bash, ask_user, exit_plan 工具]
+    L-->>P: 读取文件，调用 exit_plan
+    P-->>C: "计划：..."
 
-    C->>C: User reviews plan
+    C->>C: 用户审查计划
 
-    alt Approved
+    alt 批准
         C->>P: execute(&mut messages)
-        P->>L: [all tools]
-        L-->>P: writes/edits files
-        P-->>C: "Done."
-    else Rejected
-        C->>P: plan(&mut messages) [with feedback]
-        P->>L: [read, bash, ask_user, exit_plan tools only]
-        L-->>P: revised plan
-        P-->>C: "Revised plan: ..."
+        P->>L: [所有工具]
+        L-->>P: 写入/编辑文件
+        P-->>C: "完成。"
+    else 拒绝
+        C->>P: plan(&mut messages) [带反馈]
+        P->>L: [仅 read, bash, ask_user, exit_plan 工具]
+        L-->>P: 修改后的计划
+        P-->>C: "修改后的计划：..."
     end
 ```
 
-## Wiring it up
+## 接入项目
 
-Add the module to `mini-claw-code/src/lib.rs`:
+将模块添加到 `mini-claw-code/src/lib.rs`：
 
 ```rust
 pub mod planning;
@@ -392,63 +350,42 @@ pub mod planning;
 pub use planning::PlanAgent;
 ```
 
-That's it. Like streaming, plan mode is a purely additive feature -- no
-existing code is modified.
+就是这样。和流式处理一样，计划模式是一个纯粹的增量功能——不需要修改任何现有代码。
 
-## Running the tests
+## 运行测试
 
 ```bash
 cargo test -p mini-claw-code ch12
 ```
 
-The tests verify:
+测试验证以下内容：
 
-- **Text response**: `plan()` returns text when the LLM stops immediately.
-- **Read tool allowed**: `read` executes during planning.
-- **Write tool blocked**: `write` is blocked during planning; the file is NOT
-  created; an error `ToolResult` is sent back to the LLM.
-- **Edit tool blocked**: same behavior for `edit`.
-- **Execute allows write**: `write` works during execution; the file IS created.
-- **Full plan-then-execute**: end-to-end flow -- plan reads a file, approval,
-  execute writes a file.
-- **Message continuity**: messages from the plan phase carry into the execute
-  phase, including the injected system prompt.
-- **read_only override**: `.read_only(&["read"])` excludes `bash` from
-  planning.
-- **Streaming events**: `TextDelta` and `Done` events are emitted during
-  planning.
-- **Provider error**: empty mock propagates errors correctly.
-- **Builder pattern**: chained `.tool().read_only().plan_prompt()` compiles.
-- **System prompt injection**: `plan()` injects a system prompt at position 0.
-- **System prompt not duplicated**: calling `plan()` twice doesn't add a
-  second system message.
-- **Caller system prompt respected**: if the caller provides a `System`
-  message, `plan()` doesn't overwrite it.
-- **`exit_plan` tool**: the LLM calls `exit_plan` to signal plan completion;
-  `plan()` returns the plan text.
-- **`exit_plan` not in execute**: during `execute()`, `exit_plan` is not in
-  the tool list.
-- **Custom plan prompt**: `.plan_prompt(...)` overrides the default.
-- **Full flow with `exit_plan`**: plan reads file → calls `exit_plan` →
-  approve → execute writes file.
+- **文本响应**：当 LLM 立即停止时，`plan()` 返回文本。
+- **读取工具允许**：`read` 在计划阶段可以执行。
+- **写入工具阻止**：`write` 在计划阶段被阻止；文件不会被创建；错误 `ToolResult` 被发送回 LLM。
+- **编辑工具阻止**：`edit` 同样的行为。
+- **执行阶段允许写入**：`write` 在执行阶段正常工作；文件会被创建。
+- **完整的计划-执行流程**：端到端流程——计划阶段读取文件，批准后执行阶段写入文件。
+- **消息连续性**：计划阶段的消息延续到执行阶段，包括注入的系统提示词。
+- **read_only 覆盖**：`.read_only(&["read"])` 将 `bash` 从计划阶段中排除。
+- **流式事件**：计划阶段会发出 `TextDelta` 和 `Done` 事件。
+- **提供者错误**：空的 Mock 正确传播错误。
+- **构建器模式**：链式调用 `.tool().read_only().plan_prompt()` 可编译。
+- **系统提示词注入**：`plan()` 在位置 0 注入系统提示词。
+- **系统提示词不重复**：调用 `plan()` 两次不会添加第二条系统消息。
+- **尊重调用方的系统提示词**：如果调用方提供了 `System` 消息，`plan()` 不会覆盖它。
+- **`exit_plan` 工具**：LLM 调用 `exit_plan` 发出计划完成信号；`plan()` 返回计划文本。
+- **执行阶段无 `exit_plan`**：在 `execute()` 期间，`exit_plan` 不在工具列表中。
+- **自定义计划提示词**：`.plan_prompt(...)` 覆盖默认提示词。
+- **带 `exit_plan` 的完整流程**：计划阶段读取文件 → 调用 `exit_plan` → 批准 → 执行阶段写入文件。
 
-## Recap
+## 总结
 
-- **`PlanAgent`** separates planning (read-only) from execution (all tools)
-  using a single shared agent loop.
-- **System prompt**: `plan()` injects a system message telling the LLM it's in
-  planning mode — what tools are available, what's blocked, and that it should
-  call `exit_plan` when done.
-- **`exit_plan` tool**: the LLM explicitly signals plan completion, just like
-  Claude Code's `ExitPlanMode`. This is injected during planning and invisible
-  during execution.
-- **Double defense**: definition filtering prevents the LLM from seeing blocked
-  tools; an execution guard catches hallucinated calls.
-- **Caller-driven approval**: the agent doesn't manage approval -- the caller
-  pushes approval/rejection as `User` messages and calls the appropriate phase.
-- **Message continuity**: the same `messages` vec flows through both phases,
-  giving the LLM full context.
-- **Streaming**: both phases use `StreamProvider` and emit `AgentEvent`s, just
-  like `StreamingAgent`.
-- **Purely additive**: no changes to `SimpleAgent`, `StreamingAgent`, or any
-  existing code.
+- **`PlanAgent`** 通过一个共享的智能体循环，将计划（只读）与执行（所有工具）分离。
+- **系统提示词**：`plan()` 注入一条系统消息，告诉 LLM 它处于计划模式——哪些工具可用、哪些被阻止，以及它应该在完成时调用 `exit_plan`。
+- **`exit_plan` 工具**：LLM 显式发出计划完成信号，就像 Claude Code 的 `ExitPlanMode`。它在计划阶段被注入，在执行阶段不可见。
+- **双重防御**：定义过滤阻止 LLM 看到被阻止的工具；执行守卫捕获幻觉产生的调用。
+- **调用方驱动的批准**：智能体不管理批准——调用方将批准/拒绝作为 `User` 消息推入并调用相应的阶段。
+- **消息连续性**：同一个 `messages` 向量贯穿两个阶段，为 LLM 提供完整的上下文。
+- **流式处理**：两个阶段都使用 `StreamProvider` 并发出 `AgentEvent`，与 `StreamingAgent` 一致。
+- **纯粹增量**：无需修改 `SimpleAgent`、`StreamingAgent` 或任何现有代码。

@@ -1,27 +1,23 @@
-# Chapter 6: The OpenRouter Provider
+# 第六章：OpenRouter Provider
 
-Up to now, everything has run locally with the `MockProvider`. In this chapter
-you will implement `OpenRouterProvider` -- a provider that talks to a real LLM
-over HTTP using the OpenAI-compatible chat completions API.
+到目前为止，所有功能都通过 `MockProvider` 在本地运行。在本章中，你将实现 `OpenRouterProvider` —— 一个通过 HTTP 使用 OpenAI 兼容的 chat completions API 与真实 LLM 通信的 provider。
 
-This is the chapter that makes your agent real.
+这是让你的 agent 真正运转起来的一章。
 
-## Goal
+## 目标
 
-Implement `OpenRouterProvider` so that:
+实现 `OpenRouterProvider`，使其能够：
 
-1. It can be created with an API key and model name.
-2. It converts our internal `Message` and `ToolDefinition` types to the API
-   format.
-3. It sends HTTP POST requests to the chat completions endpoint.
-4. It parses responses back into `AssistantTurn`.
+1. 通过 API 密钥和模型名称创建实例。
+2. 将我们内部的 `Message` 和 `ToolDefinition` 类型转换为 API 格式。
+3. 向 chat completions 端点发送 HTTP POST 请求。
+4. 将响应解析回 `AssistantTurn`。
 
-## Key Rust concepts
+## 关键 Rust 概念
 
-### Serde derives and attributes
+### Serde 派生宏与属性
 
-The API types in `openrouter.rs` are already provided -- you do not need to
-modify them. But understanding them helps:
+`openrouter.rs` 中的 API 类型已经提供好了 —— 你不需要修改它们。但理解它们会有所帮助：
 
 ```rust
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -33,51 +29,44 @@ pub(crate) struct ApiToolCall {
 }
 ```
 
-Key serde attributes used:
+使用到的关键 serde 属性：
 
-- **`#[serde(rename = "type")]`** -- The JSON field is called `"type"`, but
-  `type` is a reserved keyword in Rust. So the struct field is `type_` and
-  serde renames it during serialization/deserialization.
+- **`#[serde(rename = "type")]`** —— JSON 字段名为 `"type"`，但 `type` 是 Rust 的保留关键字。因此结构体字段命名为 `type_`，serde 在序列化/反序列化时自动重命名。
 
-- **`#[serde(skip_serializing_if = "Option::is_none")]`** -- Omits the field
-  from JSON if the value is `None`. This is important because the API expects
-  certain fields to be absent (not `null`) when unused.
+- **`#[serde(skip_serializing_if = "Option::is_none")]`** —— 当值为 `None` 时，在 JSON 中省略该字段。这很重要，因为 API 期望某些未使用的字段不存在（而非为 `null`）。
 
-- **`#[serde(skip_serializing_if = "Vec::is_empty")]`** -- Same idea for
-  empty vectors. If there are no tools, we omit the `tools` field entirely.
+- **`#[serde(skip_serializing_if = "Vec::is_empty")]`** —— 对空向量同理。如果没有工具，我们完全省略 `tools` 字段。
 
-### The `reqwest` HTTP client
+### `reqwest` HTTP 客户端
 
-`reqwest` is the standard HTTP client crate in Rust. The pattern:
+`reqwest` 是 Rust 中标准的 HTTP 客户端 crate。使用模式如下：
 
 ```rust
 let response: MyType = client
     .post(url)
     .bearer_auth(&api_key)
-    .json(&body)        // serialize body as JSON
+    .json(&body)        // 将 body 序列化为 JSON
     .send()
     .await
     .context("request failed")?
-    .error_for_status() // turn 4xx/5xx into errors
+    .error_for_status() // 将 4xx/5xx 转换为错误
     .context("API returned error status")?
-    .json()             // deserialize response as JSON
+    .json()             // 将响应反序列化为 JSON
     .await
     .context("failed to parse response")?;
 ```
 
-Each method returns a builder or future that you chain together. The `?`
-operator propagates errors at each step.
+每个方法返回一个 builder 或 future，你可以链式调用。`?` 运算符在每一步传播错误。
 
 ### `impl Into<String>`
 
-Several methods use `impl Into<String>` as a parameter type:
+多个方法使用 `impl Into<String>` 作为参数类型：
 
 ```rust
 pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self
 ```
 
-This accepts anything that can be converted into a `String`: `String`, `&str`,
-`Cow<str>`, etc. Inside the method, call `.into()` to get the `String`:
+这接受任何可以转换为 `String` 的类型：`String`、`&str`、`Cow<str>` 等。在方法内部，调用 `.into()` 获取 `String`：
 
 ```rust
 api_key: api_key.into(),
@@ -86,46 +75,38 @@ model: model.into(),
 
 ### `dotenvy`
 
-The `dotenvy` crate loads environment variables from a `.env` file:
+`dotenvy` crate 从 `.env` 文件加载环境变量：
 
 ```rust
-let _ = dotenvy::dotenv(); // loads .env if present, ignores errors
+let _ = dotenvy::dotenv(); // 如果 .env 存在则加载，忽略错误
 let key = std::env::var("OPENROUTER_API_KEY")?;
 ```
 
-The `let _ =` discards the result because it is fine if `.env` does not exist
-(the variable might already be in the environment).
+`let _ =` 丢弃返回值，因为 `.env` 文件不存在也没关系（变量可能已经在环境中了）。
 
-## The API types
+## API 类型
 
-The file `mini-claw-code-starter/src/providers/openrouter.rs` starts with a block
-of serde structs. These represent the OpenAI-compatible chat completions API
-format. Here is a quick summary:
+文件 `mini-claw-code-starter/src/providers/openrouter.rs` 开头有一组 serde 结构体。它们表示 OpenAI 兼容的 chat completions API 格式。以下是简要说明：
 
-**Request types:**
-- `ChatRequest` -- the POST body: model name, messages, tools
-- `ApiMessage` -- a single message with role, content, optional tool calls
-- `ApiTool` / `ApiToolDef` -- tool definition in API format
+**请求类型：**
+- `ChatRequest` —— POST 请求体：模型名称、消息、工具
+- `ApiMessage` —— 单条消息，包含 role、content 和可选的 tool calls
+- `ApiTool` / `ApiToolDef` —— API 格式的工具定义
 
-**Response types:**
-- `ChatResponse` -- the API response: a list of choices
-- `Choice` -- a single choice containing a message and a `finish_reason`
-- `ResponseMessage` -- the assistant's response: optional content, optional
-  tool calls
+**响应类型：**
+- `ChatResponse` —— API 响应：一个 choices 列表
+- `Choice` —— 单个选项，包含一条消息和 `finish_reason`
+- `ResponseMessage` —— 助手的响应：可选的 content 和可选的 tool calls
 
-The `finish_reason` field on `Choice` tells you why the model stopped
-generating. Map it to `StopReason` in your `chat()` implementation:
-`"tool_calls"` becomes `StopReason::ToolUse`, anything else becomes
-`StopReason::Stop`.
+`Choice` 上的 `finish_reason` 字段告诉你模型为什么停止生成。在你的 `chat()` 实现中将其映射到 `StopReason`：`"tool_calls"` 对应 `StopReason::ToolUse`，其他值对应 `StopReason::Stop`。
 
-These are already complete. Your job is to implement the methods that *use*
-them.
+这些类型已经完整实现了。你的任务是实现 *使用* 它们的方法。
 
-## The implementation
+## 具体实现
 
-### Step 1: Implement `new()`
+### 第一步：实现 `new()`
 
-Initialize all four fields:
+初始化全部四个字段：
 
 ```rust
 pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
@@ -138,9 +119,9 @@ pub fn new(api_key: impl Into<String>, model: impl Into<String>) -> Self {
 }
 ```
 
-### Step 2: Implement `base_url()`
+### 第二步：实现 `base_url()`
 
-A simple builder method that overrides the base URL:
+一个简单的 builder 方法，用于覆盖 base URL：
 
 ```rust
 pub fn base_url(mut self, url: impl Into<String>) -> Self {
@@ -149,35 +130,27 @@ pub fn base_url(mut self, url: impl Into<String>) -> Self {
 }
 ```
 
-### Step 3: Implement `from_env_with_model()`
+### 第三步：实现 `from_env_with_model()`
 
-1. Load `.env` with `dotenvy::dotenv()` (ignore the result).
-2. Read `OPENROUTER_API_KEY` from the environment.
-3. Call `Self::new()` with the key and model.
+1. 使用 `dotenvy::dotenv()` 加载 `.env`（忽略返回值）。
+2. 从环境变量中读取 `OPENROUTER_API_KEY`。
+3. 用密钥和模型调用 `Self::new()`。
 
-Use `std::env::var("OPENROUTER_API_KEY")` and chain `.context(...)` for a
-clear error message if the key is missing.
+使用 `std::env::var("OPENROUTER_API_KEY")` 并链式调用 `.context(...)` 以便在密钥缺失时提供清晰的错误信息。
 
-### Step 4: Implement `from_env()`
+### 第四步：实现 `from_env()`
 
-This is a one-liner that calls `from_env_with_model` with the default model
-`"openrouter/free"`. This is a free model on OpenRouter -- no credits needed
-to get started.
+这是一行代码，使用默认模型 `"openrouter/free"` 调用 `from_env_with_model`。这是 OpenRouter 上的免费模型 —— 无需充值即可开始使用。
 
-### Step 5: Implement `convert_messages()`
+### 第五步：实现 `convert_messages()`
 
-This method translates our `Message` enum into the API's `ApiMessage` format.
-Iterate over the messages and match on each variant:
+此方法将我们的 `Message` 枚举转换为 API 的 `ApiMessage` 格式。遍历消息并对每个变体进行匹配：
 
-- **`Message::System(text)`** becomes an `ApiMessage` with role `"system"` and
-  `content: Some(text.clone())`. The other fields are `None`.
+- **`Message::System(text)`** 转换为 role 为 `"system"`、`content: Some(text.clone())` 的 `ApiMessage`。其他字段为 `None`。
 
-- **`Message::User(text)`** becomes an `ApiMessage` with role `"user"` and
-  `content: Some(text.clone())`. The other fields are `None`.
+- **`Message::User(text)`** 转换为 role 为 `"user"`、`content: Some(text.clone())` 的 `ApiMessage`。其他字段为 `None`。
 
-- **`Message::Assistant(turn)`** becomes an `ApiMessage` with role `"assistant"`.
-  Set `content` to `turn.text.clone()`. If `turn.tool_calls` is non-empty,
-  convert each `ToolCall` to an `ApiToolCall`:
+- **`Message::Assistant(turn)`** 转换为 role 为 `"assistant"` 的 `ApiMessage`。将 `content` 设为 `turn.text.clone()`。如果 `turn.tool_calls` 非空，将每个 `ToolCall` 转换为 `ApiToolCall`：
 
   ```rust
   ApiToolCall {
@@ -190,14 +163,13 @@ Iterate over the messages and match on each variant:
   }
   ```
 
-  If `tool_calls` is empty, set `tool_calls: None` (not `Some(vec![])`).
+  如果 `tool_calls` 为空，设置 `tool_calls: None`（而非 `Some(vec![])`）。
 
-- **`Message::ToolResult { id, content }`** becomes an `ApiMessage` with role
-  `"tool"`, `content: Some(content.clone())`, and `tool_call_id: Some(id.clone())`.
+- **`Message::ToolResult { id, content }`** 转换为 role 为 `"tool"`、`content: Some(content.clone())` 且 `tool_call_id: Some(id.clone())` 的 `ApiMessage`。
 
-### Step 6: Implement `convert_tools()`
+### 第六步：实现 `convert_tools()`
 
-Map each `&ToolDefinition` to an `ApiTool`:
+将每个 `&ToolDefinition` 映射为 `ApiTool`：
 
 ```rust
 ApiTool {
@@ -210,29 +182,26 @@ ApiTool {
 }
 ```
 
-### Step 7: Implement `chat()`
+### 第七步：实现 `chat()`
 
-This is the main method. It brings everything together:
+这是核心方法，它将所有部分整合在一起：
 
-1. Build a `ChatRequest` with the model, converted messages, and converted tools.
-2. POST it to `{base_url}/chat/completions` with bearer auth.
-3. Parse the response as `ChatResponse`.
-4. Extract the first choice.
-5. Convert `tool_calls` back to our `ToolCall` type.
+1. 用模型、转换后的消息和转换后的工具构建 `ChatRequest`。
+2. 使用 bearer auth 将其 POST 到 `{base_url}/chat/completions`。
+3. 将响应解析为 `ChatResponse`。
+4. 提取第一个 choice。
+5. 将 `tool_calls` 转换回我们的 `ToolCall` 类型。
 
-The tool call conversion is the trickiest part. The API returns
-`function.arguments` as a *string* (JSON-encoded), but our `ToolCall` stores
-it as a `serde_json::Value`. So you need to parse it:
+工具调用的转换是最棘手的部分。API 返回的 `function.arguments` 是一个 *字符串*（JSON 编码），但我们的 `ToolCall` 将其存储为 `serde_json::Value`。因此你需要解析它：
 
 ```rust
 let arguments = serde_json::from_str(&tc.function.arguments)
     .unwrap_or(Value::Null);
 ```
 
-The `unwrap_or(Value::Null)` handles the case where the arguments string is
-not valid JSON (unlikely with a well-behaved API, but good to be safe).
+`unwrap_or(Value::Null)` 处理参数字符串不是有效 JSON 的情况（对于行为正常的 API 来说不太可能发生，但做好防御总是好的）。
 
-Here is the skeleton for the `chat()` method:
+以下是 `chat()` 方法的骨架代码：
 
 ```rust
 async fn chat(
@@ -254,63 +223,55 @@ async fn chat(
     let choice = response.choices.into_iter().next()
         .context("no choices in response")?;
 
-    // Convert choice.message.tool_calls to Vec<ToolCall>
-    // Map finish_reason to StopReason
-    // Return AssistantTurn { text, tool_calls, stop_reason }
+    // 将 choice.message.tool_calls 转换为 Vec<ToolCall>
+    // 将 finish_reason 映射为 StopReason
+    // 返回 AssistantTurn { text, tool_calls, stop_reason }
     todo!()
 }
 ```
 
-Fill in the HTTP call chain and the response conversion logic.
+补全 HTTP 调用链和响应转换逻辑。
 
-## Running the tests
+## 运行测试
 
-Run the Chapter 6 tests:
+运行第六章的测试：
 
 ```bash
 cargo test -p mini-claw-code-starter ch6
 ```
 
-The Chapter 6 tests verify the conversion methods (`convert_messages` and
-`convert_tools`), the constructor logic, and the full `chat()` method using a
-local mock HTTP server. They do *not* call a real LLM API, so no API key is
-needed. There are also additional edge-case tests that will pass once your core
-implementation is correct.
+第六章的测试验证了转换方法（`convert_messages` 和 `convert_tools`）、构造函数逻辑，以及使用本地 mock HTTP 服务器的完整 `chat()` 方法。测试 *不会* 调用真实的 LLM API，因此不需要 API 密钥。还有一些额外的边界情况测试，一旦你的核心实现正确就会通过。
 
-### Optional: Live test
+### 可选：实时测试
 
-If you want to test with a real API, set up an OpenRouter API key:
+如果你想使用真实 API 进行测试，请设置 OpenRouter API 密钥：
 
-1. Sign up at [openrouter.ai](https://openrouter.ai).
-2. Create an API key.
-3. Create a `.env` file in the workspace root:
+1. 在 [openrouter.ai](https://openrouter.ai) 注册。
+2. 创建 API 密钥。
+3. 在工作区根目录创建 `.env` 文件：
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 
-Then try building and running the chat example from Chapter 7. But first,
-finish reading this chapter and move on to Chapter 7 where you wire everything
-up.
+然后尝试构建并运行第七章的聊天示例。但首先，请读完本章，然后继续第七章，在那里你将把所有东西连接起来。
 
-## Recap
+## 总结
 
-You have implemented a real HTTP provider that:
+你已经实现了一个真正的 HTTP provider，它能够：
 
-- Constructs from an API key and model name (or from environment variables).
-- Converts between your internal types and the OpenAI-compatible API format.
-- Sends HTTP requests and parses responses.
+- 通过 API 密钥和模型名称（或从环境变量）构建实例。
+- 在内部类型和 OpenAI 兼容的 API 格式之间进行转换。
+- 发送 HTTP 请求并解析响应。
 
-The key patterns:
-- **Serde attributes** for JSON field mapping (`rename`, `skip_serializing_if`).
-- **`reqwest`** for HTTP with a fluent builder API.
-- **`impl Into<String>`** for flexible string parameters.
-- **`dotenvy`** for loading `.env` files.
+关键模式：
+- **Serde 属性** 用于 JSON 字段映射（`rename`、`skip_serializing_if`）。
+- **`reqwest`** 提供流式 builder API 的 HTTP 客户端。
+- **`impl Into<String>`** 实现灵活的字符串参数。
+- **`dotenvy`** 用于加载 `.env` 文件。
 
-Your agent framework is now complete. Every piece -- tools, the agent loop,
-and the HTTP provider -- is implemented and tested.
+你的 agent 框架现在已经完整了。每一个部分 —— 工具、agent 循环和 HTTP provider —— 都已实现并通过测试。
 
-## What's next
+## 下一步
 
-In [Chapter 7: A Simple CLI](./ch07-putting-together.md) you will wire
-everything into an interactive CLI with conversation memory.
+在[第七章：简单的 CLI](./ch07-putting-together.md) 中，你将把所有内容连接成一个带有对话记忆的交互式 CLI。
